@@ -1,9 +1,0 @@
-defaults:
-  - base
-
-experiment:
-  name: pdb_no_trans_loss
-  dist_mode: single
-  data_location: digs
-  trans_loss_weight: 0.0
-

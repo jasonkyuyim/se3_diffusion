@@ -4,70 +4,31 @@ defaults:
   - override hydra/launcher: joblib
 
 data:
-  digs:
-    server_dir: /projects/ml/TrRosetta
-    base_pdb_dir: ${data.digs.server_dir}/PDB-2021AUG02
-    base_fb_dir: ${data.digs.server_dir}/fb_af
-    pdb_csv: ${data.digs.base_pdb_dir}/list_v02.csv
-    pdb_dir: ${data.digs.base_pdb_dir}/torch/pdb
-    fb_dir: ${data.digs.base_fb_dir}/pdb
-    fb_msa_dir: ${data.digs.base_fb_dir}/a3m
-    valid_clusters: ${data.digs.base_pdb_dir}/val/xaa
-    fb_csv: ${data.digs.base_fb_dir}/list_b1-3.csv
-    filtering:
-      resolution_cutoff: 5.0
-      max_len: 260
-      min_len: 60
-      min_plddt: 80.0
-      min_fb_len: 100
-      date_cutoff: 2020-Apr-30
-      subset: null
-    cache_dir: ./pkl_jar/
-    epoch_size: 1000
-    fraction_fb: 0.0
-    crop_len: null
-    scale_factor: 10.0
-    t_sampler: 'scheduled'
-    num_t: 100
-  rosetta:
-    csv_path: /data/rsg/chemistry/jyim/large_data/processed_pdb_protdiff/metadata.csv
-    filtering:
-      max_len: 512
-      min_len: 60
-      # Set to null for no subset selection.
-      subset: null
-      allowed_oligomer: [monomeric]
-      max_helix_percent: 1.0
-      max_loop_percent: 0.5
-      min_beta_percent: -1.0
-      # Old data setting
-      # max_helix_percent: 0.7
-      # max_loop_percent: 0.5
-      # min_beta_percent: 0.1
-      rog_quantile: 0.0
-    hallucination_percent: 1.0
-    aatype_masking: False
-    mixed_t: False
-    motif_size_min: 10
-    scaffold_size_min: 10
-    scaffold_size_max: 200
-    min_t: 0.01
-    has_splits: False
-    samples_per_cath: 1
-    samples_per_eval_length: 4
-    num_eval_lengths: 10
-    num_t: 100
+  csv_path: /data/rsg/chemistry/jyim/large_data/processed_pdb_protdiff/metadata.csv
+  filtering:
+    max_len: 512
+    min_len: 60
+    # Set to null for no subset selection.
+    subset: null
+    allowed_oligomer: [monomeric]
+    max_helix_percent: 1.0
+    max_loop_percent: 0.5
+    min_beta_percent: -1.0
+    rog_quantile: 0.0
+  hallucination_percent: 1.0
+  aatype_masking: False
+  mixed_t: False
+  motif_size_min: 10
+  scaffold_size_min: 10
+  scaffold_size_max: 200
+  min_t: 0.01
+  has_splits: False
+  samples_per_cath: 1
+  samples_per_eval_length: 4
+  num_eval_lengths: 10
+  num_t: 100
 
 diffuser:
-
-  # Sequence diffuser arguments
-  seq:
-    diffuse_seq: False
-    min_b: 15.0
-    max_b: 20.0
-    schedule: linear
-
-  # SE(3) diffuser arguments
   se3:
     diffuse_trans: True
     diffuse_rot: True
@@ -185,63 +146,3 @@ experiment:
   noise_scale: 1.0
   # Filled in during training.
   num_parameters: null
-
-hydra:
-  sweeper:
-    params:
-
-      # experiment.name: no_2d_no_sc
-      # experiment.dist_mat_loss_weight: 0.0
-      # experiment.num_epoch: 70
-      # model.embed.embed_self_conditioning: False
-      # experiment.warm_start: pkl_jar/ckpt/no_2d_no_sc_0/30D_01M_2023Y_21h_33m_07s
-
-      # experiment.name: no_bb_no_2d_no_sc
-      # experiment.bb_atom_loss_weight: 0.0
-      # experiment.dist_mat_loss_weight: 0.0
-      # experiment.num_epoch: 88
-      # model.embed.embed_self_conditioning: False
-      # experiment.warm_start: pkl_jar/ckpt/no_2d_no_sc_0/30D_01M_2023Y_21h_33m_07s
-
-      # experiment.name: no_bb_loss
-      # experiment.bb_atom_loss_weight: 0.0
-      # experiment.num_epoch: 88
-      # experiment.warm_start: pkl_jar/ckpt/no_bb_loss_0/16D_01M_2023Y_03h_50m_06s
-
-      # experiment.name: no_2d_loss
-      # experiment.dist_mat_loss_weight: 0.0
-      # experiment.num_epoch: 60
-      # experiment.warm_start: pkl_jar/ckpt/no_2d_loss_0/28D_01M_2023Y_18h_06m_01s
-
-      # experiment.name: no_dsm_loss_scaling_01
-      # experiment.trans_loss_weight: 0.0
-      # experiment.rot_loss_weight: 0.0
-      # experiment.bb_atom_loss_t_filter: 1.0
-      # experiment.dist_mat_loss_t_filter: 1.0
-      # experiment.bb_atom_scaling: 0.1
-      # experiment.dist_mat_scaling: 0.1
-      # experiment.num_epoch: 88
-      # experiment.warm_start: pkl_jar/ckpt/no_dsm_0/16D_01M_2023Y_03h_55m_31s
-
-      # experiment.name: no_sc
-      # model.embed.embed_self_conditioning: False
-      # experiment.num_epoch: 50
-
-      # experiment.name: no_filter
-      # data.rosetta.filtering.allowed_oligomer: []
-      # model.embed.embed_chain_idx: True
-      # experiment.noise_scale: 0.1
-      # experiment.warm_start: pkl_jar/ckpt/no_filter_0/28D_01M_2023Y_18h_08m_36s
-
-      # experiment.name: continue
-      # experiment.warm_start: pkl_jar/ckpt/unconditional_512_0/27D_11M_2022Y_09h_58m_16s
-
-      # experiment.name: continue_dsm_loss
-      # experiment.warm_start: pkl_jar/ckpt/unconditional_512_0/27D_11M_2022Y_09h_58m_16s
-      # experiment.trans_x0_threshold: 1.0
-
-      # experiment.name: warmstart_use_dsm_loss
-      # experiment.trans_x0_threshold: 0.0
-      # experiment.warm_start: pkl_jar/ckpt/use_dsm_loss_0/05D_01M_2023Y_21h_21m_12s
-
-      # experiment.name: paper_model
