@@ -1,0 +1,18 @@
+defaults:
+  - base
+
+data:
+  rosetta:
+    filtering:
+      max_helix_percent: null
+      max_loop_percent: null
+      min_beta_percent: null
+      rog_quantile: null
+
+experiment:
+  name: no_shape_filter
+
+hydra:
+  sweeper:
+    params:
+      data.rosetta.filtering.subset: 1000,null

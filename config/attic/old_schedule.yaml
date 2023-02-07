@@ -1,0 +1,16 @@
+defaults:
+  - base
+
+diffuser:
+  trans_schedule: linear 
+  trans_max_b: 20.0
+  rot_schedule: exponential
+
+experiment:
+  name: old_schedule
+
+hydra:
+  sweeper:
+    params:
+      data.rosetta.filtering.subset: 1000,null
+      model.embed_aatype: False

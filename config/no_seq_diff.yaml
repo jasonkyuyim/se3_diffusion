@@ -1,0 +1,164 @@
+defaults:
+  - base
+
+data:
+  rosetta:
+    mixed_t: False
+    filtering:
+      max_len: 512
+
+diffuser:
+  seq:
+    diffuse_seq: False
+
+model:
+  aatype_prediction: False
+  embed:
+    embed_aatype: False
+
+
+experiment:
+  name: ablation_no_bb_atom_loss
+  dist_mode: multi
+  multi_gpu_size: 2
+  max_squared_res: 3e5
+
+hydra:
+  sweeper:
+    params:
+      experiment.name: ablation_data_filter
+      model.ipa.tfmr_skip_residual: True
+      data.rosetta.filtering.max_loop_percent: 0.5,1.0
+
+
+      # experiment.name: unconditional_512_original_schedule
+      # data.rosetta.hallucination_percent: 1.0
+      # experiment.warm_start: pkl_jar/ckpt/unconditional_len_512_0/20D_11M_2022Y_15h_50m_01s
+      # experiment.use_warm_start_conf: False
+      # model.ipa.tfmr_skip_residual: True
+
+      # diffuser.se3.r3.min_b: 0.1
+      # diffuser.se3.so3.min_sigma: 0.1
+      # data.rosetta.min_t: 0.01
+
+      # experiment.name: no_seq_diff
+      # experiment.dist_mode: single
+      # experiment.max_squared_res: 5e5
+      # data.rosetta.filtering.max_len: 260
+      # data.rosetta.hallucination_percent: 1.0,0.0
+      # diffuser.se3.so3.equivariant_score: True
+
+      # experiment.name: unconditional_warm_start
+      # data.rosetta.filtering.max_len: 260
+      # experiment.dist_mode: single
+      # data.rosetta.hallucination_percent: 1.0
+      # experiment.warm_start: pkl_jar/ckpt/no_seq_diff_1/13D_11M_2022Y_18h_13m_02s
+      # experiment.use_warm_start_conf: False
+
+      # experiment.name: unconditional_skip
+      # data.rosetta.filtering.max_len: 260
+      # experiment.dist_mode: single
+      # data.rosetta.hallucination_percent: 1.0
+      # model.ipa.tfmr_skip_residual: True
+
+      # experiment.name: unconditional_schedule_sweep
+      # data.rosetta.filtering.max_len: 260
+      # diffuser.se3.r3.min_b: 4.0,0.1
+      # diffuser.se3.so3.min_sigma: 0.5,0.1
+      # data.rosetta.min_t: 0.01
+      # experiment.dist_mode: single
+      # data.rosetta.hallucination_percent: 1.0
+      # experiment.warm_start: pkl_jar/ckpt/no_seq_diff_1/13D_11M_2022Y_18h_13m_02s
+      # experiment.use_warm_start_conf: False
+
+      # experiment.name: unconditional_equivariant_rot_score
+      # data.rosetta.filtering.max_len: 260
+      # experiment.dist_mode: single
+      # data.rosetta.hallucination_percent: 1.0
+      # diffuser.se3.so3.equivariant_score: True
+      # model.equivariant_rot_score: True
+      # experiment.warm_start: pkl_jar/ckpt/no_seq_diff_1/13D_11M_2022Y_18h_13m_02s
+      # experiment.use_warm_start_conf: False
+
+      # experiment.name: unconditional_len_512
+      # data.rosetta.filtering.max_len: 512
+      # data.rosetta.hallucination_percent: 1.0
+      # experiment.bb_atom_loss_weight: 0.0
+      # experiment.dist_mat_loss_weight: 1.0
+      # experiment.dist_mat_loss_t_filter: 0.4
+      # experiment.warm_start: pkl_jar/ckpt/unconditional_len_512_0/20D_11M_2022Y_15h_50m_01s
+      # experiment.use_warm_start_conf: False
+
+      # experiment.name: inpainting_len_512_no_aux_loss
+      # data.rosetta.filtering.max_len: 512
+      # experiment.bb_atom_loss_weight: 0.0
+      # experiment.dist_mat_loss_weight: 0.0
+      # experiment.psi_loss_weight: 1.0
+      # experiment.warm_start: pkl_jar/ckpt/inpainting_len_512_no_aux_loss_0/21D_11M_2022Y_00h_14m_48s
+      # experiment.use_warm_start_conf: False
+
+      # experiment.name: swiss_len_512
+      # data.rosetta.hallucination_percent: 0.5
+      # data.rosetta.aatype_masking: True
+      # data.rosetta.filtering.max_len: 512
+      # data.rosetta.filtering.max_loop_percent: 1.0
+      # data.rosetta.filtering.rog_quantile: -1
+      # experiment.warm_start: pkl_jar/ckpt/no_seq_diff_0/13D_11M_2022Y_18h_13m_02s
+      # experiment.use_warm_start_conf: False
+      # model.embed.embed_aatype: True
+
+      # experiment.name: mixed_len_512
+      # data.rosetta.hallucination_percent: 0.5
+      # data.rosetta.filtering.max_len: 512
+      # data.rosetta.filtering.max_loop_percent: 1.0
+      # data.rosetta.filtering.rog_quantile: -1
+      # experiment.warm_start: pkl_jar/ckpt/no_seq_diff_1/13D_11M_2022Y_18h_13m_02s
+      # experiment.use_warm_start_conf: False
+
+      # experiment.name: folding_len_512_no_filter
+      # data.rosetta.hallucination_percent: 1.0
+      # data.rosetta.filtering.max_len: 512
+      # data.rosetta.filtering.max_loop_percent: 1.0
+      # data.rosetta.filtering.rog_quantile: -1
+      # experiment.warm_start: pkl_jar/ckpt/no_seq_diff_0/13D_11M_2022Y_18h_13m_02s
+      # experiment.use_warm_start_conf: False
+      # model.embed.embed_aatype: True
+
+      # experiment.name: inpainting_len_512_no_filter
+      # data.rosetta.filtering.max_len: 512
+      # data.rosetta.filtering.max_loop_percent: 1.0
+      # data.rosetta.filtering.rog_quantile: -1
+      # experiment.warm_start: pkl_jar/ckpt/no_seq_diff_3/13D_11M_2022Y_18h_13m_02s
+      # experiment.use_warm_start_conf: False
+
+      # experiment.name: unconditional_len_512_no_loop_filter_no_rog
+      # data.rosetta.hallucination_percent: 1.0
+      # data.rosetta.filtering.max_len: 512
+      # data.rosetta.filtering.max_loop_percent: 1.0
+      # data.rosetta.filtering.rog_quantile: -1
+      # experiment.warm_start: pkl_jar/ckpt/no_seq_diff_1/13D_11M_2022Y_18h_13m_02s
+      # experiment.use_warm_start_conf: False
+
+      # experiment.name: unconditional_len_512_no_filter_no_warm_start
+      # data.rosetta.hallucination_percent: 1.0
+      # data.rosetta.filtering.max_len: 512
+      # data.rosetta.filtering.max_loop_percent: 1.0
+      # data.rosetta.filtering.rog_quantile: -1
+
+      # experiment.name: folding_len_512
+      # data.rosetta.hallucination_percent: 1.0
+      # data.rosetta.filtering.max_len: 512
+      # experiment.warm_start: pkl_jar/ckpt/no_seq_diff_0/13D_11M_2022Y_18h_13m_02s
+      # experiment.use_warm_start_conf: False
+      # model.embed.embed_aatype: True
+
+      # experiment.name: unconditional_len_512
+      # data.rosetta.hallucination_percent: 1.0
+      # data.rosetta.filtering.max_len: 512
+      # experiment.warm_start: pkl_jar/ckpt/no_seq_diff_1/13D_11M_2022Y_18h_13m_02s
+      # experiment.use_warm_start_conf: False
+
+      # experiment.name: inpainting_len_512
+      # data.rosetta.filtering.max_len: 512
+      # experiment.warm_start: pkl_jar/ckpt/no_seq_diff_3/13D_11M_2022Y_18h_13m_02s
+      # experiment.use_warm_start_conf: False

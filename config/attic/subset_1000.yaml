@@ -1,0 +1,13 @@
+defaults:
+  - base
+
+data:
+  digs:
+    filtering:
+      subset: 1000
+  rosetta:
+    filtering:
+      subset: 1000
+
+experiment:
+  name: subset_1000

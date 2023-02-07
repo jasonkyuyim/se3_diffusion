@@ -1,0 +1,15 @@
+defaults:
+  - base
+
+diffuser:
+  trans_schedule: exponential
+  trans_max_b: 20.0
+  rot_schedule: linear
+
+experiment:
+  name: exp_lin_schedule
+
+hydra:
+  sweeper:
+    params:
+      data.rosetta.filtering.subset: 1000,null

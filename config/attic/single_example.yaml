@@ -1,0 +1,16 @@
+defaults:
+  - base
+
+data:
+  rosetta:
+    filtering:
+      subset: 1
+      max_len: 80
+    num_eval_lengths: 1
+
+experiment:
+  name: single_example
+
+hydra:
+  sweeper:
+    params:

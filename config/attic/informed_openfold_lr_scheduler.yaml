@@ -1,0 +1,16 @@
+defaults:
+  - base_no_mr
+  - openfold_lr_scheduler
+
+experiment:
+  name: informed_params_openfold_lr_scheduler
+
+openfold_lr_scheduler:  
+  last_epoch: -1
+  verbose: False
+  base_lr: 0
+  max_lr: 0.0001
+  warmup_no_steps: 10
+  start_decay_after_n_steps: 100
+  decay_every_n_steps: 10
+  decay_factor: 0.95

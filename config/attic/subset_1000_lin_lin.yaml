@@ -1,0 +1,18 @@
+defaults:
+  - base
+
+data:
+  digs:
+    filtering:
+      subset: 1000
+
+
+diffuser:
+  trans_schedule: linear
+  rot_schedule: linear
+
+
+experiment:
+  name: subset_1000_lin_lin
+  dist_mode: single
+  data_location: digs

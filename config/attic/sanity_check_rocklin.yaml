@@ -1,0 +1,17 @@
+defaults:
+  - base
+
+data:
+  digs:
+    filtering:
+      subset: 10
+    fraction_fb: 0.0
+    crop_len: 50
+  rosetta:
+    use_rocklin: True
+
+experiment:
+  name: sanity_check_rocklin
+  dist_mode: single
+  data_location: rosetta
+  ckpt_freq: 500

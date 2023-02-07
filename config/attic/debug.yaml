@@ -1,0 +1,14 @@
+data:
+  max_len: 100
+  min_len: 60
+  date_cutoff: 2020-Apr-30
+  min_plddt: 80.0
+  min_fb_len: 100
+  cache_path: ./pkl_jar/debug_dataset.pkl
+  subset: 1000
+  epoch_size: 50
+
+experiment:
+  log_freq: 10
+  batch_size: 2
+  ckpt_dir: null

@@ -1,0 +1,16 @@
+defaults:
+  - base
+
+data:
+  digs:
+    filtering:
+      subset: 100
+  rosetta:
+    filtering:
+      subset: 100
+
+
+experiment:
+  name: subset_100
+  dist_mode: single
+  data_location: digs

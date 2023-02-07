@@ -1,0 +1,32 @@
+
+
+python experiments/train_se3_diffusion.py \
+    -cn sanity_check_no_crop
+
+python experiments/train_se3_diffusion.py \
+    -cn subset_100 \
+    experiment.data_location=rosetta
+
+python experiments/train_se3_diffusion.py \
+    -cn subset_1000 \
+    experiment.data_location=rosetta
+
+python experiments/train_se3_diffusion.py \
+    -cn base \
+    experiment.data_location=rosetta
+
+python experiments/train_se3_diffusion.py \
+    -cn pdb_exp_lin \
+    experiment.data_location=rosetta
+
+python experiments/train_se3_diffusion.py \
+    -cn pdb_exp_lin \
+    experiment.data_location=rosetta
+
+python experiments/train_se3_diffusion.py \
+    -cn pdb_lin_log_4 \
+    experiment.data_location=rosetta
+
+python experiments/train_se3_diffusion.py \
+    -cn subset_1000_exp_lin \
+    experiment.data_location=rosetta

@@ -1,0 +1,10 @@
+defaults:
+  - base_no_mr
+
+experiment:
+  name: t_sampler_sweep
+
+hydra:
+  sweeper:
+    params:
+      data.rosetta.t_sampler: scheduled,uniform

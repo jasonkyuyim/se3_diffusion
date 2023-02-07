@@ -1,0 +1,19 @@
+defaults:
+  - base
+
+experiment:
+  name: psi_sweep
+
+model:
+  stop_torsion_grad: False
+
+diffuser:
+  trans_schedule: linear
+  rot_schedule: logarithmic
+  rot_max_sigma: 1.5
+  trans_max_b: 7.5
+
+hydra:
+  sweeper:
+    params:
+      data.rosetta.filtering.subset: 1000,null

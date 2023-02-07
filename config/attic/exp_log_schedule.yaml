@@ -1,0 +1,16 @@
+defaults:
+  - base
+
+diffuser:
+  trans_schedule: exponential
+  trans_max_b: 20.0
+  rot_schedule: logarithmic
+  rot_max_sigma: 2.5
+
+experiment:
+  name: exp_log_schedule
+
+hydra:
+  sweeper:
+    params:
+      data.rosetta.filtering.subset: 1000,null

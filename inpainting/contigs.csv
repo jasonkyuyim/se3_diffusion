@@ -1,0 +1,11 @@
+,target,motif_contig,file_path
+0,rsv_site_5,16-34,/data/rsg/chemistry/jyim/projects/protein_diffusion/inpainting/targets/rsv_Jue_design.pdb
+1,ef_hand,31-43,/data/rsg/chemistry/jyim/projects/protein_diffusion/inpainting/targets/1PRW-EF-hand_1motif_98_rd2.pdb
+2,6e6r_1_A,23-32,/data/rsg/chemistry/jyim/projects/protein_diffusion/inpainting/targets/6e6r_1_A.pdb
+3,6e6r_1_A,32-43,/data/rsg/chemistry/jyim/projects/protein_diffusion/inpainting/targets/6e6r_1_A.pdb
+4,6exz_1_A,24-35,/data/rsg/chemistry/jyim/projects/protein_diffusion/inpainting/targets/6exz_1_A.pdb
+5,6exz_1_A,32-43,/data/rsg/chemistry/jyim/projects/protein_diffusion/inpainting/targets/6exz_1_A.pdb
+6,5ci9_1_A,58-68,/data/rsg/chemistry/jyim/projects/protein_diffusion/inpainting/targets/5ci9_1_A.pdb
+7,5ci9_1_A,65-75,/data/rsg/chemistry/jyim/projects/protein_diffusion/inpainting/targets/5ci9_1_A.pdb
+8,5trv_1_A,42-62,/data/rsg/chemistry/jyim/projects/protein_diffusion/inpainting/targets/5trv_1_A.pdb
+9,5trv_1_A,50-60,/data/rsg/chemistry/jyim/projects/protein_diffusion/inpainting/targets/5trv_1_A.pdb

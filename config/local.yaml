@@ -1,0 +1,34 @@
+defaults:
+  - base
+
+data:
+  rosetta:
+    mixed_t: False
+    aatype_masking: True
+    filtering:
+      subset: 100
+      allowed_oligomer: null
+
+diffuser:
+  seq:
+    diffuse_seq: False
+
+model:
+  embed:
+    embed_chain_idx: False
+
+experiment:
+  name: debugging_1
+  use_wandb: False
+  batch_size: 64
+  log_freq: 1000
+  ckpt_freq: 5000
+  early_ckpt: False
+  dist_mat_loss_weight: 1.0
+  num_loader_workers: 0
+  dist_mode: single
+  warm_start: pkl_jar/ckpt/ablation_x0_loss_no_dist_mat_loss_bigger_batch_bb_t_02_0/24D_12M_2022Y_18h_11m_17s
+
+hydra:
+  sweeper:
+    params:

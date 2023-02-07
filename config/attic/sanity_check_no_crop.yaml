@@ -1,0 +1,14 @@
+defaults:
+  - base
+
+data:
+  digs:
+    filtering:
+      subset: 1
+    crop_len: null
+
+experiment:
+  name: sanity_check_no_crop
+  dist_mode: single
+  data_location: digs
+  ckpt_freq: 100

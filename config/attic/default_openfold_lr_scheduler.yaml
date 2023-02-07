@@ -1,0 +1,6 @@
+defaults:
+  - base_no_mr
+  - openfold_lr_scheduler_base
+
+experiment:
+  name: default_openfold_lr_scheduler

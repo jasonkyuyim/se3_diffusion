@@ -1,0 +1,43 @@
+# Default or base configuration for SE(3) diffusion experiments.
+
+defaults:
+  - base
+
+data:
+  rosetta:
+    csv_path: /data/rsg/chemistry/jyim/large_data/cath/metadata.csv
+    filtering:
+      max_len: 260
+      min_len: 60
+      subset: null
+      allowed_oligomer: null
+      max_helix_percent: null
+      max_loop_percent: 0.5
+      min_beta_percent: null
+      rog_quantile: 0.95
+    has_splits: True
+
+model:
+  ipa:
+    pred_rot_score: False
+    embed_distogram: True
+    tfmr_skip_residual: True
+  embed:
+    embed_distogram: True
+
+experiment:
+  name: cath_splits
+  bb_atom_loss_t_filter: 1.0
+  bb_atom_scaling: 0.1
+  bb_atom_loss_weight: 0.3
+  dist_mat_loss_weight: 0.3
+  rot_loss_weight: 0.0
+  trans_loss_weight: 0.0
+  violation_loss_weight: 1.0
+  violation_loss_filter: 0.1
+  eval_batch_size: 1
+
+hydra:
+  sweeper:
+    params:
+      data.rosetta.filtering.max_len: 128,260
