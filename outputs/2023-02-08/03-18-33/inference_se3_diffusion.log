@@ -1,4 +1,0 @@
-[2023-02-08 03:18:33,562][__main__][INFO] - Using GPU: cuda
-[2023-02-08 03:18:33,563][__main__][INFO] - Saving results to ./samples/08D_02M_2023Y_03h_18m_33s
-[2023-02-08 03:18:33,577][__main__][INFO] - Saving inference config to ./samples/08D_02M_2023Y_03h_18m_33s/inference_conf.yaml
-[2023-02-08 03:18:33,577][__main__][INFO] - Loading weights from ./weights/paper_weights.pth

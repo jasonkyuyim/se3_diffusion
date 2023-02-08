@@ -1,3 +1,0 @@
-[2023-02-08 03:14:08,101][__main__][INFO] - Using GPU: cuda
-[2023-02-08 03:14:08,103][__main__][INFO] - Saving results to ./samples/08D_02M_2023Y_03h_14m_08s
-[2023-02-08 03:14:08,121][__main__][INFO] - Saving inference config to ./samples/08D_02M_2023Y_03h_14m_08s/inference_conf.yaml

@@ -1,8 +1,0 @@
-[2023-02-08 04:33:16,990][__main__][INFO] - Using GPU: cuda
-[2023-02-08 04:33:17,002][__main__][INFO] - Saving results to ./samples/08D_02M_2023Y_04h_33m_16s
-[2023-02-08 04:33:17,022][__main__][INFO] - Saving inference config to ./samples/08D_02M_2023Y_04h_33m_16s/inference_conf.yaml
-[2023-02-08 04:33:17,022][__main__][INFO] - Loading weights from ./weights/paper_weights.pth
-[2023-02-08 04:33:19,039][data.so3_diffuser][INFO] - Using cached IGSO3.
-[2023-02-08 04:33:19,991][experiments.train_se3_diffusion][INFO] - Number of model parameters 17446190
-[2023-02-08 04:33:19,992][experiments.train_se3_diffusion][INFO] - Checkpoint not being saved.
-[2023-02-08 04:35:45,091][__main__][INFO] - Sampling length 100: ./samples/08D_02M_2023Y_04h_33m_16s/length_100
