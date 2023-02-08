@@ -1,154 +1,37 @@
-# Base configuration for inference on SE(3) diffusion experiments.
+# Configuration for inference on SE(3) diffusion experiments.
 defaults:
   - base
 
 inference:
   name: null
-  base_dir: /data/rsg/chemistry/jyim/projects/protein_diffusion/
-  esm_dir: /data/rsg/chemistry/jyim/.cache/torch
-
-  # Select model ckpt from spreedsheet
-  # https://docs.google.com/spreadsheets/d/1I3AsxLPpaMEPgekprvyJnZ4oO_Ii_qhNmCPjKW5lAbw/edit?usp=sharing 
-  ckpt_dir: pkl_jar/ckpt/unconditional_512_0/27D_11M_2022Y_09h_58m_16s
-
-  # Possible tasks:
-  # - unconditional
-  # - inpainting
-  # - folding (TODO)
-  # - leng_inpainting (TODO)
-  task: unconditional
-
-  output_dir: null
-  override: False
+  gpu_id: null  # CUDA GPU to use
   seed: 123
-  dist_mode: single
-  num_multi_gpu: 2
+
+  # Directory of software, weights, and outputs.
+  pt_hub_dir: ./.cache/torch/
+  pmpnn_dir: ./ProteinMPNN/
+  output_dir: ./inference_outputs/
+
+  # Path to model weights.
+  weights_path: ./weights/paper_weights.pth
 
   diffusion:
-    ode: False
-    min_t: 0.01
+    # Number of steps.
     num_t: 500
-    self_condition: True
+    # Analogous to sampling temperature.
     noise_scale: 1.0
+    # Final t.
+    min_t: 0.01
 
-  override_diffuser: False
-  diffuser:
-    se3:
-      so3:
-        schedule: logarithmic
-
-  inpainting:
-    samples_per_motif: 10
-    use_smc: True
-    num_particles: 32
-    target_csv: /data/rsg/chemistry/jyim/projects/protein_diffusion/inpainting/benchmark.csv
-
-  unconditional:
+  samples:
+    # Number of backbone samples per sequence length.
     samples_per_length: 10
+    # Number of ESMFdold samples per backbone sample.
     seq_per_sample: 8
+    # Minimum sequence length to sample.
     min_length: 100
-    max_length: 510
-    sampling: fixed_range
+    # Maximum sequence length to sample.
+    max_length: 500
+    # gap between lengths to sample. i.e. this script will sample all lengths
+    # in range(min_length, max_length, length_step)
     length_step: 5
-    num_lengths: 500
-
-hydra:
-  sweeper:
-    params:
-      # inference.name: paper_model
-      # inference.ckpt_dir: pkl_jar/ckpt/paper_model_0/05D_01M_2023Y_21h_21m_33s
-      # inference.unconditional.min_length: 300
-
-      inference.name: paper_model_noise_01
-      inference.ckpt_dir: pkl_jar/ckpt/paper_model_0/05D_01M_2023Y_21h_21m_33s
-      inference.diffusion.noise_scale: 0.1
-
-      # inference.name: benchmark
-      # inference.diffusion.noise_scale: 0.1
-      # inference.unconditional.seq_per_sample: 100
-      # inference.unconditional.min_length: 500
-      # inference.unconditional.max_length: 
-      # inference.unconditional.samples_per_length: 100
-      # inference.diffusion.num_t: 100
-      # inference.ckpt_dir: pkl_jar/ckpt/continue_0/05D_01M_2023Y_21h_15m_16s
-
-      # inference.name: ablation_no_dsm
-      # inference.ckpt_dir: pkl_jar/ckpt/no_dsm_0/28D_01M_2023Y_18h_07m_05s
-      # inference.unconditional.min_length: 300
-
-      # inference.name: noise_level_01_rf_benchmark_2
-      # inference.diffusion.noise_scale: 0.1
-      # inference.unconditional.seq_per_sample: 100
-      # inference.unconditional.min_length: 70
-      # inference.unconditional.max_length: 80
-      # inference.unconditional.samples_per_length: 100
-
-      # inference.name: noise_level_00_seqs_100
-      # inference.name: noise_level_01_rf_benchmark
-      # inference.name: noise_level_01_steps_100_seqs_100
-      # inference.name: timing
-      # inference.ckpt_dir: pkl_jar/ckpt/unconditional_512_0/27D_11M_2022Y_09h_58m_16s
-      # inference.diffusion.noise_scale: 0.1
-      # inference.diffusion.num_t: 100
-      # inference.unconditional.seq_per_sample: 100
-      # inference.unconditional.min_length: 500
-      # inference.unconditional.max_length: 355
-      # inference.unconditional.samples_per_length: 2400
-
-      ## Noise levels
-      # inference.ckpt_dir: pkl_jar/ckpt/unconditional_512_0/27D_11M_2022Y_09h_58m_16s
-
-      # inference.name: noise_level_05
-      # inference.diffusion.noise_scale: 0.5
-      # inference.unconditional.min_length: 450
-      # inference.unconditional.max_length: 465
-
-      # inference.name: noise_level_01_rf_benchmark
-      # inference.diffusion.noise_scale: 0.1
-      # inference.unconditional.min_length: 70
-      # inference.unconditional.max_length: 80
-      # inference.unconditional.samples_per_length: 2400
-
-      # inference.name: noise_level_01_seqs_100
-      # inference.diffusion.noise_scale: 0.1
-      # inference.unconditional.min_length: 450
-      # inference.unconditional.seq_per_sample: 100
-
-      ## Ablations
-
-      # No self conditioning
-      # inference.name: no_self_condition_noise_01
-      # inference.diffusion.noise_scale: 0.1
-      # inference.ckpt_dir: pkl_jar/ckpt/baseline_0/25D_12M_2022Y_16h_24m_23s
-      # inference.unconditional.min_length: 465
-
-      # No distance loss
-      # inference.name: no_2d_loss_noise_01
-      # inference.ckpt_dir: pkl_jar/ckpt/ablation_x0_loss_no_dist_mat_loss_0/17D_12M_2022Y_14h_26m_15s
-      # inference.name: no_2d_loss_alt_noise_01
-      # inference.ckpt_dir: pkl_jar/ckpt/ablation_x0_loss_no_dist_mat_loss_bigger_batch_bb_t_02_0/25D_12M_2022Y_16h_21m_13s
-      # inference.unconditional.min_length: 465
-
-      # No auxiliary losses
-      # inference.name: no_aux_loss_noise
-      # inference.ckpt_dir: pkl_jar/ckpt/ablation_no_aux_losses_x0_loss_0/17D_12M_2022Y_14h_25m_22s
-      # inference.unconditional.min_length: 465
-      # inference.name: no_aux_loss_noise_alt
-      # inference.ckpt_dir: pkl_jar/ckpt/ablation_no_aux_losses_big_batch_0/25D_12M_2022Y_12h_57m_27s
-
-      # Score loss
-      # inference.name: score_loss_alt
-      # inference.ckpt_dir: pkl_jar/ckpt/ablation_no_aux_losses_0/17D_12M_2022Y_14h_24m_45s
-      # inference.unconditional.min_length: 465
-
-      ## Shelf ablations
-      # inference.name: score_loss_noise_01
-      # inference.ckpt_dir: pkl_jar/ckpt/ablation_no_aux_losses_big_batch_0/25D_12M_2022Y_12h_57m_27s
-
-      # inference.ckpt_dir: pkl_jar/ckpt/ablation_no_dist_mat_loss_0/25D_12M_2022Y_13h_51m_29s
-      # inference.diffusion.self_condition: False
-
-      # inference.diffusion.self_condition: False
-      # inference.unconditional.min_length: 395
-      # inference.unconditional.max_length: 435
-

@@ -1,3 +1,5 @@
+.vscode/
+.cache/
 pkl_jar/
 multirun/
-samples/
+inference_outputs/

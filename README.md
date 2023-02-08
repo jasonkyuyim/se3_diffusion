@@ -1,42 +1,11 @@
-# Protein diffusion
+# SE(3) diffusion model with application to protein backbone generation
 
-
-## Data location
-
-The repository is set-up to work on both MIT (`rosetta`) and UW (`digs`) servers.
-The location can be switched with the command line flags
-
-* `experiment.data_location=rosetta`
-* `experiment.data_location=digs`
-
-The only difference is the data_loader that gets used -- either `rosetta_data_loader.py` or `digs_data_loader.py`.
-
-TODO: verify both data_loaders do the same preprocessing.
+Implementation for "SE(3) diffusion model with application to protein backbone generation" [arxiv link](https://arxiv.org/abs/2302.02277).
+While our work is tailored towards protein backbone generation, it is in principle applicable to other domains where SE(3) is utilized.
 
 ## Installation
 
-A quick and hacky option is to activate Jason's conda. 
 
-```bash
-conda activate /data/rsg/chemistry/jyim/miniconda3/envs/dev
-```
-
-Install the protein_diffusion package: Run `pip install -e .` with `protein_diffusion` as the current directory.
-
-Install hydra joblib 
-https://hydra.cc/docs/plugins/joblib_launcher/
-
-(from Ivan A.) To install NVIDIA's SE3-transformer
-
-```bash
-git clone https://github.com/NVIDIA/DeepLearningExamples
-cd ./DeepLearningExamples/DGLPyTorch/DrugDiscovery/SE3Transformer
-python ./setup.py install
-```
-
-* An up to date version of dgl (deep graph library) is also needed.
-
-Install https://github.com/e3nn/e3nn 
 
 
 ## Training

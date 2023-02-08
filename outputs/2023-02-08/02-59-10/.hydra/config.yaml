@@ -1,0 +1,148 @@
+data:
+  csv_path: /data/rsg/chemistry/jyim/large_data/processed_pdb_protdiff/metadata.csv
+  filtering:
+    max_len: 512
+    min_len: 60
+    subset: null
+    allowed_oligomer:
+    - monomeric
+    max_helix_percent: 1.0
+    max_loop_percent: 0.5
+    min_beta_percent: -1.0
+    rog_quantile: 0.0
+  hallucination_percent: 1.0
+  aatype_masking: false
+  mixed_t: false
+  motif_size_min: 10
+  scaffold_size_min: 10
+  scaffold_size_max: 200
+  min_t: 0.01
+  has_splits: false
+  samples_per_cath: 1
+  samples_per_eval_length: 4
+  num_eval_lengths: 10
+  num_t: 100
+diffuser:
+  se3:
+    diffuse_trans: true
+    diffuse_rot: true
+    r3:
+      min_b: 0.1
+      max_b: 20.0
+      schedule: linear
+      score_scaling: std
+      coordinate_scaling: 0.1
+    so3:
+      num_omega: 1000
+      num_sigma: 1000
+      min_sigma: 0.1
+      max_sigma: 1.5
+      schedule: logarithmic
+      equivariant_score: false
+      cache_dir: ./pkl_jar/
+      score_scaling: std
+model:
+  node_embed_size: 256
+  edge_embed_size: 128
+  dropout: 0.0
+  network_type: ipa
+  equivariant_rot_score: ${diffuser.se3.so3.equivariant_score}
+  rigid_prediction: true
+  aatype_prediction: ${diffuser.seq.diffuse_seq}
+  embed:
+    index_embed_size: 32
+    aatype_embed_size: 64
+    embed_aatype: false
+    embed_chain_idx: false
+    embed_self_conditioning: true
+    mixed_t: ${data.rosetta.mixed_t}
+    num_bins: 22
+    min_bin: 1.0e-05
+    max_bin: 20.0
+  ipa:
+    c_s: ${model.node_embed_size}
+    c_z: ${model.edge_embed_size}
+    ipa_skip_residual: true
+    c_hidden: 256
+    c_skip: 64
+    no_heads: 8
+    no_qk_points: 8
+    no_v_points: 12
+    seq_tfmr_num_heads: 4
+    seq_tfmr_num_layers: 2
+    num_blocks: 4
+    aatype_head_layers: 2
+    coordinate_scaling: ${diffuser.se3.r3.coordinate_scaling}
+    tfmr_skip_residual: true
+    pred_rot_score: false
+    embed_distogram: false
+  se3_tfmr:
+    num_channels: 32
+    num_degrees: 2
+    n_heads: 4
+    div: 4
+    l0_in_features: ${model.node_embed_size}
+    l0_out_features: ${model.node_embed_size}
+    l1_in_features: 2
+    l1_out_features: 2
+    num_edge_features: ${model.edge_embed_size}
+    num_layers: 2
+experiment:
+  name: baseline
+  data_location: rosetta
+  wandb_dir: ./
+  run_id: null
+  log_freq: 1000
+  batch_size: 256
+  eval_batch_size: ${data.rosetta.samples_per_eval_length}
+  num_loader_workers: 10
+  num_epoch: 1000000
+  learning_rate: 0.0001
+  use_scheduler: false
+  ckpt_dir: ./pkl_jar/ckpt/
+  max_squared_res: 1000000
+  use_gpu: true
+  sample_mode: time_batch
+  ckpt_freq: 10000
+  early_ckpt: true
+  warm_start: null
+  use_warm_start_conf: false
+  port: 12319
+  dist_mode: multi
+  multi_gpu_size: 2
+  use_wandb: true
+  prefetch_factor: 100
+  trans_loss_weight: 1.0
+  rot_loss_weight: 1.0
+  psi_loss_weight: 0.0
+  psi_loss_t_filter: 0.4
+  trans_x0_threshold: 1.0
+  coord_loss_scaling: ${diffuser.se3.r3.coordinate_scaling}
+  bb_atom_loss_weight: 1.0
+  bb_atom_loss_t_filter: 0.25
+  bb_atom_scaling: 0.5
+  aatype_loss_weight: 1.0
+  dist_mat_loss_weight: 1.0
+  dist_mat_loss_t_filter: 0.25
+  dist_mat_scaling: 0.5
+  likelihood_metric: false
+  eval_dir: ./results
+  noise_scale: 1.0
+  num_parameters: null
+inference:
+  name: null
+  base_dir: null
+  esm_dir: /data/rsg/chemistry/jyim/.cache/torch
+  ckpt_dir: weights/paper_weights.pth
+  output_dir: null
+  seed: 123
+  diffusion:
+    num_t: 500
+    noise_scale: 1.0
+  samples:
+    samples_per_length: 10
+    seq_per_sample: 8
+    min_length: 100
+    max_length: 510
+    length_step: 5
+    num_lengths: 500
