@@ -13,33 +13,6 @@ from openfold.data import data_transforms
 from openfold.np import residue_constants
 from openfold.utils import rigid_utils
 
-from sklearn.preprocessing import PolynomialFeatures
-from sklearn.linear_model import LinearRegression
-
-
-def _rog_quantile_curve(df, quantile, eval_x):
-    quantile = 0.96
-    y_quant = pd.pivot_table(
-        df,
-        values='radius_gyration', 
-        index='modeled_seq_len',
-        aggfunc=lambda x: np.quantile(x, quantile)
-    )
-    x_quant = y_quant.index.to_numpy()
-    y_quant = y_quant.radius_gyration.to_numpy()
-
-    # Fit polynomial regressor
-    poly = PolynomialFeatures(degree=4, include_bias=True)
-    poly_features = poly.fit_transform(x_quant[:, None])
-    poly_reg_model = LinearRegression()
-    poly_reg_model.fit(poly_features, y_quant)
-
-    # Calculate cutoff for all sequence lengths
-    pred_poly_features = poly.fit_transform(eval_x[:, None])
-    # Add a little more.
-    pred_y = poly_reg_model.predict(pred_poly_features) + 0.1
-    return pred_y
-
 class PdbDataset(data.Dataset):
     def __init__(
             self,

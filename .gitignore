@@ -3,3 +3,4 @@
 pkl_jar/
 multirun/
 inference_outputs/
+**/*.egg-info

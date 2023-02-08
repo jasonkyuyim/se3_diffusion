@@ -1,11 +1,5 @@
 """Pytorch script for training SE(3) protein diffusion.
 
-Instructions:
-
-By default hydra will launch with `config/base.yaml` settings.
-Specify different config with the `-cn <config_name>` flag excluding .yaml,
-i.e. `-cn subset_1000`.
-
 To run:
 
 > python experiments/train_se3_diffusion.py
@@ -17,19 +11,6 @@ Without Wandb,
 To modify config options with the command line,
 
 > python experiments/train_se3_diffusion.py experiment.batch_size=32
-
-Use tmux to start experiments and have them continue running.
-Another option is to send the experiments into the background.
-
-> python experiments/train_se3_diffusion.py &
-
-Hydra saves all logging into outputs/<date>/<time>/<train_se3_diffusion.log
-as well as the configs used to run the experiment in the same directory.
-
-Multi-run can be achieved with the `-m` flag. The config must specify the sweep.
-For an example, see `psi_sweep.yaml`.
-
-> python experiments/train_se3_diffusion.py -cn psi_sweep -m
 
 """
 
@@ -51,14 +32,10 @@ from omegaconf import DictConfig
 from omegaconf import OmegaConf
 import pandas as pd
 import torch.distributed as dist
-from scipy.special import softmax
-from scipy.spatial.transform import Rotation as scipy_R
 
 from torch.utils import data
-from torch.autograd.functional import jacobian
 from torch.nn.parallel import DataParallel as DP
 from openfold.utils import rigid_utils as ru
-from openfold.utils import loss as of_loss
 from hydra.core.hydra_config import HydraConfig
 
 from analysis import utils as au
@@ -122,14 +99,6 @@ class Experiment:
                 f'{self._exp_conf.name}_{HydraConfig.get().job.num}')
         self._diff_conf = conf.diffuser
         self._model_conf = conf.model
-        self.data_mode = self._exp_conf.data_location
-        if self.data_mode == 'rosetta':
-            self._data_conf = self.conf.data.rosetta
-        elif self.data_mode == 'digs':
-            self._data_conf = self.conf.data.digs
-        else:
-            raise ValueError(
-                f'Unrecognize data location {self.data_mode}')
         self._dist_mode = self._exp_conf.dist_mode
         self._use_wandb = self._exp_conf.use_wandb
 
@@ -137,20 +106,10 @@ class Experiment:
         self.trained_epochs = 0
         self.trained_steps = 0
         self._diffuser = protein_diffuser.ProteinDiffuser(self._diff_conf)
-        if self._model_conf.network_type == 'ipa':
-            self._model = score_network.ScoreNetwork(
-                self._model_conf, self.diffuser)
-        else:
-            raise ValueError(
-                f'Unrecognized network: {self._model_conf.network_type}')
+        self._model = score_network.ScoreNetwork(
+            self._model_conf, self.diffuser)
 
         if ckpt_model is not None:
-            # TODO: Create more robust way of partially loading weights.
-            # ckpt_keys = list(ckpt_model.keys())
-            # for k in ckpt_keys:
-            #     if 'embedding_layer' in k:
-            #         del ckpt_model[k]
-
             ckpt_model = {k.replace('module.', ''):v for k,v in ckpt_model.items()}
             self._model.load_state_dict(ckpt_model, strict=True)
 
@@ -332,11 +291,6 @@ class Experiment:
             name=self._exp_conf.name,
             config=dict(eu.flatten_dict(conf_dict)),
             dir=self._exp_conf.wandb_dir,
-            entity='jyim',
-            tags=[
-                'experimental',
-                self._exp_conf.data_location,
-            ],
         )
         self._exp_conf.run_id = wandb.util.generate_id()
         self._exp_conf.wandb_dir = wandb.run.dir

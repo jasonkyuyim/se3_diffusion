@@ -1,13 +1,12 @@
 from setuptools import setup
 
 setup(
-    name="protein_diffusion",
+    name="se3_diffusion",
     packages=[
         'data',
         'analysis',
         'model',
         'experiments',
-        'scripts',
         'openfold'
     ],
     package_dir={
@@ -15,7 +14,6 @@ setup(
         'analysis': './analysis',
         'model': './model',
         'experiments': './experiments',
-        'scripts': './scripts',
         'openfold': './openfold',
     },
 )

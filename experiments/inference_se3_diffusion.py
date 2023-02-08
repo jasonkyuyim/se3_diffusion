@@ -17,6 +17,7 @@ import pandas as pd
 import shutil
 from datetime import datetime
 from biotite.sequence.io import fasta
+import GPUtil
 from typing import Optional
 
 from analysis import utils as au
@@ -94,7 +95,10 @@ class Sampler:
         # Set-up accelerator
         if torch.cuda.is_available():
             if self._infer_conf.gpu_id is None:
-                self.device = 'cuda'
+                available_gpus = ''.join(
+                    [str(x) for x in GPUtil.getAvailable(
+                        order='memory', limit = 8)])
+                self.device = f'cuda:{available_gpus[0]}'
             else:
                 self.device = f'cuda:{self._infer_conf.gpu_id}'
         else:
@@ -128,15 +132,13 @@ class Sampler:
         self._log.info(f'Loading weights from {self._weights_path}')
 
         # Read checkpoint and create experiment.
-        ckpt_pkl = du.read_pkl(
+        weights_pkl = du.read_pkl(
             self._weights_path, use_torch=True,
             map_location=self.device)
-        ckpt_conf = ckpt_pkl['conf']
-        ckpt_model = ckpt_pkl['model']
 
         # Merge base experiment config with checkpoint config.
-        self._ckpt_conf = ckpt_conf
-        self._conf = OmegaConf.merge(self._conf, ckpt_conf)
+        self._conf.model = OmegaConf.merge(
+            self._conf.model, weights_pkl['conf'].model)
         if conf_overrides is not None:
             self._conf = OmegaConf.merge(self._conf, conf_overrides)
 
@@ -148,8 +150,10 @@ class Sampler:
         self.model = self.exp.model
 
         # Remove module prefix if it exists.
-        ckpt_model = {k.replace('module.', ''):v for k,v in ckpt_model.items()}
-        self.model.load_state_dict(ckpt_model)
+        model_weights = weights_pkl['model']
+        model_weights = {
+            k.replace('module.', ''):v for k,v in model_weights.items()}
+        self.model.load_state_dict(model_weights)
         self.model = self.model.to(self.device)
         self.model.eval()
         self.diffuser = self.exp.diffuser

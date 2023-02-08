@@ -1,0 +1,4 @@
+[2023-02-08 06:12:36,368][__main__][INFO] - Using device: cuda:0
+[2023-02-08 06:12:36,370][__main__][INFO] - Saving results to ./inference_outputs/08D_02M_2023Y_06h_12m_36s
+[2023-02-08 06:12:36,391][__main__][INFO] - Saving inference config to ./inference_outputs/08D_02M_2023Y_06h_12m_36s/inference_conf.yaml
+[2023-02-08 06:12:36,391][__main__][INFO] - Loading weights from ./weights/paper_weights.pth
