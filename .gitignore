@@ -1,6 +1,10 @@
 .vscode/
 .cache/
 pkl_jar/
+wandb/
+outputs/
+data/processed_pdb/
+ckpt/
 multirun/
 inference_outputs/
 train_outputs/

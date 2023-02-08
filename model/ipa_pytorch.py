@@ -9,10 +9,8 @@ from typing import Optional, Callable, List, Sequence
 from openfold.utils import rigid_utils as ru
 from openfold.utils.rigid_utils import Rigid
 from model import utils
-from model import custom_tfmr
 import functools as fn
 from data import all_atom
-from data import utils as du
 from openfold.np import residue_constants
 
 
@@ -538,41 +536,6 @@ class ScoreLayer(nn.Module):
         return s
 
 
-class AatypeHead(nn.Module):
-    def __init__(self, dim_in, num_heads, num_layers):
-        super(AatypeHead, self).__init__()
-        tfmr_layer = custom_tfmr.TransformerEncoderLayer(
-            d_model=dim_in,
-            nhead=num_heads,
-            dim_feedforward=dim_in,
-            batch_first=True,
-            dropout=0.0,
-        )
-        self.tfmr = torch.nn.TransformerEncoder(tfmr_layer, num_layers)
-        self.pred = Linear(dim_in, residue_constants.restype_num, init="final")
-
-    def forward(self, s, padding_mask):
-        s = self.tfmr(s, src_key_padding_mask=padding_mask)
-        s = self.pred(s)
-        return s
-
-
-class DistogramHead(nn.Module):
-    def __init__(self, dim_in, dim_hid, dim_out):
-        super(DistogramHead, self).__init__()
-        self.linear_1 = Linear(dim_in, dim_hid, init="relu")
-        self.linear_2 = Linear(dim_hid, dim_out, init="final")
-        self.relu = nn.ReLU()
-
-    def forward(self, z):
-        batch_size, num_res = z.shape[:2]
-        z = z.reshape([batch_size, num_res**2, -1])
-        z = self.linear_1(z)
-        z = self.relu(z)
-        z = self.linear_2(z)
-        return z.reshape([batch_size, num_res, num_res, -1])
-
-
 class BackboneUpdate(nn.Module):
     """
     Implements part of Algorithm 23.
@@ -664,13 +627,6 @@ class IpaScore(nn.Module):
             self.rot_pred = Linear(ipa_conf.c_s, 3, init="final")
 
         self.torsion_pred = TorsionAngles(ipa_conf.c_s, 1)
-
-        if self._model_conf.aatype_prediction:
-            self.aatype_pred = AatypeHead(
-                self._model_conf.node_embed_size * 2,
-                ipa_conf.seq_tfmr_num_heads,
-                ipa_conf.aatype_head_layers,
-            )
 
     def forward(self, init_node_embed, edge_embed, input_feats):
         node_mask = input_feats['res_mask'].type(torch.float32)
@@ -773,10 +729,4 @@ class IpaScore(nn.Module):
 
         if self._model_conf.rigid_prediction:
             model_out['final_rigids'] = curr_rigids 
-
-        if self._model_conf.aatype_prediction:
-            model_out['aatype'] = self.aatype_pred(
-                torch.cat([node_embed, init_node_embed], dim=-1),
-                padding_mask=1 - node_mask
-            )
         return model_out

@@ -4,7 +4,7 @@ defaults:
   - override hydra/launcher: joblib
 
 data:
-  csv_path: ./processed/metadata.csv
+  csv_path: ./processed_pdb/metadata.csv
   filtering:
     max_len: 512
     min_len: 60
@@ -29,43 +29,37 @@ data:
   num_t: 100
 
 diffuser:
-  se3:
-    diffuse_trans: True
-    diffuse_rot: True
+  diffuse_trans: True
+  diffuse_rot: True
 
-    # R(3) diffuser arguments
-    r3:
-      min_b: 0.1
-      max_b: 20.0
-      schedule: linear
-      score_scaling: std 
-      coordinate_scaling: 0.1
+  # R(3) diffuser arguments
+  r3:
+    min_b: 0.1
+    max_b: 20.0
+    coordinate_scaling: 0.1
 
-    # SO(3) diffuser arguments
-    so3:
-      num_omega: 1000
-      num_sigma: 1000
-      min_sigma: 0.1
-      max_sigma: 1.5
-      schedule: logarithmic
-      equivariant_score: False
-      cache_dir: ./pkl_jar/
-      score_scaling: std
+  # SO(3) diffuser arguments
+  so3:
+    num_omega: 1000
+    num_sigma: 1000
+    min_sigma: 0.1
+    max_sigma: 1.5
+    schedule: logarithmic
+    equivariant_score: False  # TODO: Set this to true and make sure same outputs.
+    cache_dir: .cache/
 
 model:
   node_embed_size: 256
   edge_embed_size: 128
   dropout: 0.0
-  equivariant_rot_score: ${diffuser.se3.so3.equivariant_score}
+  equivariant_rot_score: ${diffuser.so3.equivariant_score}
   rigid_prediction: True
-  aatype_prediction: ${diffuser.seq.diffuse_seq}
   embed:
     index_embed_size: 32
     aatype_embed_size: 64
     embed_aatype: False
     embed_chain_idx: False
     embed_self_conditioning: True
-    mixed_t: ${data.rosetta.mixed_t}
     num_bins: 22
     min_bin: 1e-5
     max_bin: 20.0
@@ -82,7 +76,7 @@ model:
     seq_tfmr_num_layers: 2
     num_blocks: 4
     aatype_head_layers: 2
-    coordinate_scaling: ${diffuser.se3.r3.coordinate_scaling}
+    coordinate_scaling: ${diffuser.r3.coordinate_scaling}
     tfmr_skip_residual: True
     pred_rot_score: False
     embed_distogram: False
@@ -104,12 +98,12 @@ experiment:
   run_id: null
   log_freq: 1000
   batch_size: 256
-  eval_batch_size: ${data.rosetta.samples_per_eval_length}
+  eval_batch_size: ${data.samples_per_eval_length}
   num_loader_workers: 10
   num_epoch: 1000000
   learning_rate: 0.0001
   use_scheduler: False
-  ckpt_dir: ./pkl_jar/ckpt/
+  ckpt_dir: ./ckpt/
   max_squared_res: 1000000
   use_gpu: True
   sample_mode: time_batch
@@ -122,15 +116,13 @@ experiment:
   port: 12319
   dist_mode: multi
   multi_gpu_size: 2
-  use_wandb: True
+  use_wandb: False
   prefetch_factor: 100
   # Loss weights.
   trans_loss_weight: 1.0
   rot_loss_weight: 1.0
-  psi_loss_weight: 0.0
-  psi_loss_t_filter: 0.4
   trans_x0_threshold: 1.0
-  coord_loss_scaling: ${diffuser.se3.r3.coordinate_scaling}
+  coord_loss_scaling: ${diffuser.r3.coordinate_scaling}
   bb_atom_loss_weight: 1.0
   bb_atom_loss_t_filter: 0.25
   bb_atom_scaling: 0.5

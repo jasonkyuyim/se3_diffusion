@@ -57,8 +57,6 @@ class Embedder(nn.Module):
         # Time step embedding
         index_embed_size = self._embed_conf.index_embed_size
         t_embed_size = index_embed_size
-        if self._embed_conf.mixed_t:
-            t_embed_size += index_embed_size
         node_embed_dims = t_embed_size + 1
         edge_in = (t_embed_size + 1) * 2
 
@@ -163,14 +161,8 @@ class Embedder(nn.Module):
         fixed_t_embed = self.timestep_embedder(
             torch.ones_like(t_seq)*1e-10)
 
-        if self._embed_conf.mixed_t:
-            t_struct_embed = torch.tile(
-                self.timestep_embedder(t_struct)[:, None, :], (1, num_res, 1))
-            t_embed = torch.cat([t_seq_embed, t_struct_embed], dim=-1)
-            fixed_t_embed = torch.tile(fixed_t_embed[:, None, :], (1, num_res, 2))
-        else:
-            fixed_t_embed = torch.tile(fixed_t_embed[:, None, :], (1, num_res, 1))
-            t_embed = t_seq_embed
+        fixed_t_embed = torch.tile(fixed_t_embed[:, None, :], (1, num_res, 1))
+        t_embed = t_seq_embed
 
         # Set time step to epsilon=1e-5 for fixed residues.
         fixed_mask = fixed_mask[..., None]
@@ -234,12 +226,7 @@ class ScoreNetwork(nn.Module):
 
         self.embedding_layer = Embedder(model_conf)
         self.diffuser = diffuser
-
-        if self._model_conf.network_type == 'ipa':
-            self.score_model = ipa_pytorch.IpaScore(model_conf, diffuser)
-        else:
-            raise ValueError(
-                f'Unrecognized network {self._model_conf.network_type}')
+        self.score_model = ipa_pytorch.IpaScore(model_conf, diffuser)
 
     def _apply_mask(self, aatype_diff, aatype_0, diff_mask):
         return diff_mask * aatype_diff + (1 - diff_mask) * aatype_0

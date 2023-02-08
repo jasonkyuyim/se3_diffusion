@@ -43,7 +43,7 @@ from analysis import metrics
 from data import digs_data_loader
 from data import residue_constants
 from data import rosetta_data_loader
-from data import protein_diffuser
+from data import se3_diffuser
 from data import utils as du
 from data import all_atom
 from model import score_network
@@ -99,13 +99,14 @@ class Experiment:
                 f'{self._exp_conf.name}_{HydraConfig.get().job.num}')
         self._diff_conf = conf.diffuser
         self._model_conf = conf.model
+        self._data_conf = conf.data
         self._dist_mode = self._exp_conf.dist_mode
         self._use_wandb = self._exp_conf.use_wandb
 
         # Initialize experiment objects
         self.trained_epochs = 0
         self.trained_steps = 0
-        self._diffuser = protein_diffuser.ProteinDiffuser(self._diff_conf)
+        self._diffuser = se3_diffuser.SE3Diffuser(self._diff_conf)
         self._model = score_network.ScoreNetwork(
             self._model_conf, self.diffuser)
 
@@ -214,7 +215,7 @@ class Experiment:
         # Return samplers in order to set epoch during training loop.
         return train_loader, train_sampler, valid_loader, valid_sampler
 
-    def create_rosetta_dataset(self, replica_id, num_replicas):
+    def create_dataset(self):
 
         # Datasets
         train_dataset = rosetta_data_loader.PdbDataset(
@@ -303,33 +304,26 @@ class Experiment:
 
         if torch.cuda.is_available() and self._exp_conf.use_gpu:
             gpu_id = self._available_gpus[replica_id]
-            self._log.info(f"Using GPU: {gpu_id}")
             device = f"cuda:{gpu_id}"
         else:
             device = 'cpu'
+        self._log.info(f"Using device: {device}")
 
         if self._dist_mode == 'multi':
             device_ids = [
                 f"cuda:{i}" for i in self._available_gpus[:self._exp_conf.multi_gpu_size]
             ]
             self._log.info(f"Multi-GPU training on GPUs: {device_ids}")
-            self._model = DP(
-                self._model,
-                device_ids=device_ids
-            )
+            self._model = DP(self._model, device_ids=device_ids)
         self._model = self.model.to(device)
         self._model.train()
 
-        # Data selector based on server being ran from.
-        if self.data_mode == 'digs':
-            train_loader, train_sampler, valid_loader, valid_sampler = self.create_digs_dataset(
-                replica_id, num_replicas)
-        elif self.data_mode == 'rosetta':
-            train_loader, valid_loader, train_sampler, valid_sampler = self.create_rosetta_dataset(
-                replica_id, num_replicas)
-        else:
-            raise ValueError(
-                f'Unrecognize data location {self.data_mode}')
+        (
+            train_loader,
+            valid_loader,
+            train_sampler,
+            valid_sampler
+        ) = self.create_dataset()
 
         logs = []
         for epoch in range(self.trained_epochs, self._exp_conf.num_epoch):

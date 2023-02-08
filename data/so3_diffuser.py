@@ -115,12 +115,12 @@ class SO3Diffuser:
         score_norms_cache = os.path.join(cache_dir, 'score_norms.npy')
 
         if os.path.exists(pdf_cache) and os.path.exists(cdf_cache) and os.path.exists(score_norms_cache):
-            self._log.info('Using cached IGSO3.')
+            self._log.info(f'Using cached IGSO3 in {cache_dir}')
             self._pdf = np.load(pdf_cache)
             self._cdf = np.load(cdf_cache)
             self._score_norms = np.load(score_norms_cache)
         else:
-            self._log.info('Computing IGSO3.')
+            self._log.info(f'Computing IGSO3. Saving in {cache_dir}')
             # compute the expansion of the power series
             exp_vals = np.asarray(
                 [igso3_expansion(self.discrete_omega, sigma) for sigma in self.discrete_sigma])
@@ -141,26 +141,11 @@ class SO3Diffuser:
             np.save(cdf_cache, self._cdf)
             np.save(score_norms_cache, self._score_norms)
 
-        if so3_conf.score_scaling == 'expected_norm':
-            self._score_scaling = np.abs(
-                np.sum(
-                    self._score_norms * self._pdf, axis=-1) / np.sum(
-                        self._pdf, axis=-1)
-            )
-        elif so3_conf.score_scaling == 'var':
-            self._score_scaling = np.abs(
-                np.sum(
-                    self._score_norms**2 * self._pdf, axis=-1) / np.sum(
-                        self._pdf, axis=-1)
-            )
-        elif so3_conf.score_scaling == 'std':
-            self._score_scaling = np.sqrt(np.abs(
-                np.sum(
-                    self._score_norms**2 * self._pdf, axis=-1) / np.sum(
-                        self._pdf, axis=-1)
-            )) / np.sqrt(3)
-        else:
-            raise ValueError(f'Unrecognized score scaling {so3_conf.score_scaling}')
+        self._score_scaling = np.sqrt(np.abs(
+            np.sum(
+                self._score_norms**2 * self._pdf, axis=-1) / np.sum(
+                    self._pdf, axis=-1)
+        )) / np.sqrt(3)
 
     @property
     def discrete_sigma(self):
@@ -176,10 +161,7 @@ class SO3Diffuser:
         """Extract \sigma(t) corresponding to chosen sigma schedule."""
         if np.any(t < 0) or np.any(t > 1):
             raise ValueError(f'Invalid t={t}')
-        if self.schedule == 'exponential':
-            sigma = t * np.log10(self.max_sigma) + (1 - t) * np.log10(self.min_sigma)
-            return 10 ** sigma
-        elif self.schedule == 'linear':
+        if self.schedule == 'linear':
             return self.min_sigma + (self.max_sigma - self.min_sigma)*t
         elif self.schedule == 'logarithmic':
             return np.log(t * np.exp(self.max_sigma) + (1 - t) * np.exp(self.min_sigma))
@@ -189,9 +171,7 @@ class SO3Diffuser:
     def diffusion_coef(self, t):
         """Compute diffusion coefficient (g_t)."""
         # TODO: Use autograd to get coefficients from sigma.
-        if self.schedule == 'exponential':
-            g_t = self.sigma(t) * np.sqrt(2 * np.log(self.max_sigma / self.min_sigma))
-        elif self.schedule == 'linear':
+        if self.schedule == 'linear':
             g_t = np.sqrt(2 * self.sigma(t) * (self.max_sigma - self.min_sigma))
         elif self.schedule == 'logarithmic':
             g_t = np.sqrt(

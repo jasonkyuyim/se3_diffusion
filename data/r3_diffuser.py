@@ -16,8 +16,6 @@ class R3Diffuser:
         self._r3_conf = r3_conf
         self.min_b = r3_conf.min_b
         self.max_b = r3_conf.max_b
-        self.schedule = r3_conf.schedule
-        self._score_scaling = r3_conf.score_scaling
 
     def _scale(self, x):
         return x * self._r3_conf.coordinate_scaling
@@ -28,15 +26,7 @@ class R3Diffuser:
     def b_t(self, t):
         if np.any(t < 0) or np.any(t > 1):
             raise ValueError(f'Invalid t={t}')
-        if self.schedule == 'linear': 
-            return self.min_b + t*(self.max_b - self.min_b)
-        elif self.schedule == 'cosine':
-            return self.max_b + 0.5*(self.min_b - self.max_b)*(1 + np.cos(t*np.pi))
-        elif self.schedule == 'exponential':
-            sigma = t * np.log10(self.max_b) + (1 - t) * np.log10(self.min_b)
-            return 10 ** sigma
-        else:
-            raise ValueError(f'Unknown schedule {self.schedule}')
+        return self.min_b + t*(self.max_b - self.min_b)
     
     def diffusion_coef(self, t):
         """Time-dependent diffusion coefficient."""
@@ -50,13 +40,7 @@ class R3Diffuser:
         return np.random.normal(size=(n_samples, 3))
 
     def marginal_b_t(self, t):
-        if self.schedule == 'linear':
-            return t*self.min_b + (1/2)*(t**2)*(self.max_b-self.min_b)
-        elif self.schedule == 'exponential': 
-            return (self.max_b**t * self.min_b**(1-t) - self.min_b) / (
-                np.log(self.max_b) - np.log(self.min_b))
-        else:
-            raise ValueError(f'Unknown schedule {self.schedule}')
+        return t*self.min_b + (1/2)*(t**2)*(self.max_b-self.min_b)
 
     def calc_trans_0(self, score_t, x_t, t, use_torch=True):
         beta_t = self.marginal_b_t(t)
@@ -117,14 +101,7 @@ class R3Diffuser:
         return x_t, score_t
 
     def score_scaling(self, t: float):
-        if self._score_scaling == 'var':
-            return 1 / self.conditional_var(t)
-        elif self._score_scaling == 'std':
-            return 1 / np.sqrt(self.conditional_var(t))
-        elif self._score_scaling == 'expected_norm':
-            return np.sqrt(2) / (gamma(1.5) * np.sqrt(self.conditional_var(t)))
-        else:
-            raise ValueError(f'Unrecognized scaling {self._score_scaling}')
+        return 1 / np.sqrt(self.conditional_var(t))
 
     def reverse(
             self,

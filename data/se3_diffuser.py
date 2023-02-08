@@ -4,6 +4,7 @@ from data import so3_diffuser
 from data import r3_diffuser
 from scipy.spatial.transform import Rotation
 from openfold.utils import rigid_utils as ru
+from data import utils as du
 import torch
 import logging
 
@@ -111,8 +112,24 @@ class SE3Diffuser:
     def calc_trans_0(self, trans_score, trans_t, t):
         return self._r3_diffuser.calc_trans_0(trans_score, trans_t, t)
 
+    def calc_trans_score(self, trans_t, trans_0, t, use_torch=False, scale=True):
+        return self._r3_diffuser.score(
+            trans_t, trans_0, t, use_torch=use_torch, scale=scale)
+
+    def calc_rot_sore(self, rots_t, rots_0, t):
+        rots_0_inv = rots_0.invert()
+        quats_0_inv = rots_0_inv.get_quats()
+        quats_t = rots_t.get_quats()
+        quats_0t = ru.quat_multiply(quats_0_inv, quats_t)
+        rotvec_0t = du.quat_to_rotvec(quats_0t)
+        return self._so3_diffuser.torch_score(rotvec_0t, t)
+
     def _apply_mask(self, x_diff, x_fixed, diff_mask):
         return diff_mask * x_diff + (1 - diff_mask) * x_fixed
+
+    def trans_parameters(self, trans_t, score_t, t, dt, mask):
+        return self._r3_diffuser.distribution(
+            trans_t, score_t, t, dt, mask)
 
     def score(
             self,
@@ -139,43 +156,6 @@ class SE3Diffuser:
         rot_score_scaling = self._so3_diffuser.score_scaling(t)
         trans_score_scaling = self._r3_diffuser.score_scaling(t)
         return rot_score_scaling, trans_score_scaling
-
-
-    def tilde_f(
-        self,
-        x_t_as_6D: np.ndarray,
-        score_t_as_6D: np.ndarray,
-        mask: np.ndarray,
-        t: float # array?
-    ):
-        """tilde_f parameterizes the probability flow ODE
-
-        Defined following Eq 38 of Song SDE.
-
-        Args:
-            x_t_as_6D: [..., N, 6] where N is # of residues and 6 dimensions to parameterize tranlation and rotation.
-                x_t_as_6D[...,:3] are translations, and x_t_as_6D[...,3:] are rotation vectors relative to the global frame
-            score_t_as_6D: [..., N, 6] score
-            mask: [..., N] mask where zeros indicate hiding.
-            t: time step
-
-        Returns:
-            tilde_f(x_t, t)
-        """
-
-        # drift coefficient (zeros for rotations)
-        f_t = torch.cat([
-            self._r3_diffuser.drift_coef(x_t_as_6D[..., :3], t),
-            torch.zeros_like(self._r3_diffuser.drift_coef(x_t_as_6D[..., :3], t)),
-        ], dim=-1)
-        g_t = torch.cat([
-            torch.tensor(self._r3_diffuser.diffusion_coef(t))*torch.ones([1, 3]),
-            torch.tensor(self._so3_diffuser.diffusion_coef(t))*torch.ones([1, 3]),
-        ], dim=-1).to(f_t.device)
-
-        tilde_f_val = f_t - (1/2)*(g_t**2)*score_t_as_6D
-        tilde_f_val *= mask[..., None]
-        return tilde_f_val
 
     def reverse(
             self,
