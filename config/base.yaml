@@ -37,7 +37,6 @@ diffuser:
     min_sigma: 0.1
     max_sigma: 1.5
     schedule: logarithmic
-    equivariant_score: True
     cache_dir: .cache/
 
 model:

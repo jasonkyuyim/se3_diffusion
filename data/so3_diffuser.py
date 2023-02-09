@@ -98,7 +98,6 @@ class SO3Diffuser:
         # Discretize omegas for calculating CDFs. Skip omega=0.
         self.discrete_omega = np.linspace(0, np.pi, so3_conf.num_omega+1)[1:]
 
-        self.equivariant_score = so3_conf.equivariant_score
 
         # Precompute IGSO3 values.
         replace_period = lambda x: str(x).replace('.', '_')
@@ -292,12 +291,8 @@ class SO3Diffuser:
         sampled_rots = self.sample(t, n_samples=n_samples)
         rot_score = self.score(sampled_rots, t).reshape(rots_0.shape)
 
-        if self.equivariant_score:
-            # Left multiply.
-            rot_t = du.compose_rotvec(sampled_rots, rots_0).reshape(rots_0.shape)
-        else:
-            # Right multiply.
-            rot_t = du.compose_rotvec(rots_0, sampled_rots).reshape(rots_0.shape)
+        # Left multiply.
+        rot_t = du.compose_rotvec(sampled_rots, rots_0).reshape(rots_0.shape)
         return rot_t, rot_score
 
     def reverse(
@@ -338,16 +333,9 @@ class SO3Diffuser:
         if mask is not None: perturb *= mask[..., None]
         n_samples = np.cumprod(rot_t.shape[:-1])[-1]
 
-        if self.equivariant_score:
-            # Left multiply.
-            rot_t_1 = du.compose_rotvec(
-                perturb.reshape(n_samples, 3),
-                rot_t.reshape(n_samples, 3),
-            ).reshape(rot_t.shape)
-        else:
-            # Right multiply.
-            rot_t_1 = du.compose_rotvec(
-                rot_t.reshape(n_samples, 3),
-                perturb.reshape(n_samples, 3)
-            ).reshape(rot_t.shape)
+        # Left multiply.
+        rot_t_1 = du.compose_rotvec(
+            perturb.reshape(n_samples, 3),
+            rot_t.reshape(n_samples, 3),
+        ).reshape(rot_t.shape)
         return rot_t_1

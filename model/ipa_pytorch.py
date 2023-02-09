@@ -661,8 +661,8 @@ class IpaScore(nn.Module):
         )
         trans_score = trans_score * node_mask[..., None]
 
-        if self.diffuser._se3_conf.so3.equivariant_score:
-            rot_score = init_rots.apply(rot_score)
+        # Rotate invariate output from IPA into the reference frame, such that rot-score is an equivariant quantity
+        rot_score = init_rots.apply(rot_score)
 
         _, psi_pred = self.torsion_pred(node_embed)
         model_out = {
