@@ -24,9 +24,7 @@ Next, we recommend installing our code as a package. To do this, run the followi
 pip install -e .
 ```
 
-**We are working on sharing the preprocessed training dataset.**
-
-In the meantime, it will be necessary to download PDB then preprocess it with our provided scripts.
+To get the training dataset, first download PDB then preprocess it with our provided scripts.
 PDB can be downloaded from RCSB: https://www.wwpdb.org/ftp/pdb-ftp-sites#rcsbpdb.
 Our scripts assume you download in **mmCIF format**.
 Navigate down to "Download Protocols" and follow the instructions depending on your location.
