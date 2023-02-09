@@ -16,8 +16,8 @@ data:
     max_loop_percent: 0.5
     min_beta_percent: -1.0
   min_t: 0.01
-  samples_per_eval_length: 2 # 4
-  num_eval_lengths: 1  # 10
+  samples_per_eval_length: 4
+  num_eval_lengths: 10
   num_t: 100
 
 diffuser:
@@ -37,14 +37,13 @@ diffuser:
     min_sigma: 0.1
     max_sigma: 1.5
     schedule: logarithmic
-    equivariant_score: False  # TODO: Set this to true and make sure same outputs.
+    equivariant_score: True
     cache_dir: .cache/
 
 model:
   node_embed_size: 256
   edge_embed_size: 128
   dropout: 0.0
-  equivariant_rot_score: ${diffuser.so3.equivariant_score}
   embed:
     index_embed_size: 32
     aatype_embed_size: 64
@@ -63,18 +62,19 @@ model:
     seq_tfmr_num_heads: 4
     seq_tfmr_num_layers: 2
     num_blocks: 4
-    aatype_head_layers: 2
     coordinate_scaling: ${diffuser.r3.coordinate_scaling}
 
 experiment:
   # Experiment metadata
   name: baseline
   run_id: null
+
+  # Training arguments
   log_freq: 1000
   batch_size: 256
   eval_batch_size: ${data.samples_per_eval_length}
   num_loader_workers: 10
-  num_epoch: 1000000
+  num_epoch: 50
   learning_rate: 0.0001
   ckpt_dir: ./ckpt/
   max_squared_res: 1000000

@@ -7,8 +7,6 @@ from scipy.stats import truncnorm
 import torch.nn as nn
 from typing import Optional, Callable, List, Sequence
 from openfold.utils.rigid_utils import Rigid
-from model import utils
-import functools as fn
 from data import all_atom
 
 
@@ -299,14 +297,6 @@ class InvariantPointAttention(nn.Module):
 
         self.softmax = nn.Softmax(dim=-1)
         self.softplus = nn.Softplus()
-
-        self.calc_rbf = fn.partial(
-            utils.calc_rbf,
-            min_dist=0,
-            max_dist=20.0,
-            num_rbf=20
-        )
-        self.linear_rbf = Linear(20, 1)
 
     def forward(
         self,
@@ -670,7 +660,7 @@ class IpaScore(nn.Module):
         )
         trans_score = trans_score * node_mask[..., None]
 
-        if self._model_conf.equivariant_rot_score:
+        if self.diffuser._se3_conf.so3.equivariant_score:
             rot_score = init_rots.apply(rot_score)
 
         _, psi_pred = self.torsion_pred(node_embed)

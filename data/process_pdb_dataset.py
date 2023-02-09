@@ -1,10 +1,9 @@
 """Script for preprocessing mmcif files for faster consumption.
 
 - Parses all mmcif protein files in a directory.
-- Removes all files that are too large.
 - Filters out low resolution files.
 - Performs any additional processing.
-- Writes all processed examples out to either prespecified or default path.
+- Writes all processed examples out to specified path.
 """
 
 import argparse
@@ -30,8 +29,7 @@ parser = argparse.ArgumentParser(
 parser.add_argument(
     '--mmcif_dir',
     help='Path to directory with mmcif files.',
-    type=str,
-    default='/data/rsg/chemistry/jyim/large_data/pdb/30_08_2021/mmCIF/')
+    type=str)
 parser.add_argument(
     '--max_file_size',
     help='Max file size.',
@@ -49,7 +47,7 @@ parser.add_argument(
     default=5.0)
 parser.add_argument(
     '--max_len',
-    help='Max length of complex.',
+    help='Max length of protein.',
     type=int,
     default=512)
 parser.add_argument(
@@ -61,7 +59,7 @@ parser.add_argument(
     '--write_dir',
     help='Path to write results to.',
     type=str,
-    default='/data/rsg/chemistry/jyim/large_data/processed_pdb_protdiff')
+    default='./data/processed_pdb')
 parser.add_argument(
     '--debug',
     help='Turn on for debugging.',

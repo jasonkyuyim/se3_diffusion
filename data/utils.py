@@ -581,17 +581,6 @@ def quat_to_rotvec(quat, eps=1e-6):
     rot_vec = rot_vec_scale[..., None] * quat[..., 1:]
     return rot_vec
 
-def center_on_motif(rigids, motif_mask):
-    """Re-center on non-diffused residues."""
-    motif_mask = torch.tensor(motif_mask[..., None])
-    rigids_trans = rigids.get_trans()
-    trans_motif = rigids_trans * motif_mask
-    motif_center = torch.sum(
-        trans_motif, dim=-2, keepdims=True) / torch.sum(
-            motif_mask, dim=-2, keepdims=True)
-    return rigids.apply_trans_fn(lambda x: x - motif_center)
-
-
 def save_fasta(
         pred_seqs,
         seq_names,
