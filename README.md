@@ -24,6 +24,33 @@ Next, we recommend installing our code as a package. To do this, run the followi
 pip install -e .
 ```
 
+## Inference
+
+`inference_se3_diffusion.py` is the inference script. It utilizes [Hydra](https://hydra.cc).
+Training can be done with the following.
+```python
+python experiments/inference_se3_diffusion.py
+```
+The config for inference is in `config/inference.yaml`.
+See the config for different inference options.
+By default, inference will use the published paper weights in `weights/paper_weights.pth`.
+Simply change the `weights_path` to use your custom weights.
+```yaml
+inference:
+    weights_path: <path>
+```
+
+### Third party source code
+
+Our repo keeps a fork of [OpenFold](https://github.com/aqlaboratory/openfold) since we made a few changes to the source code.
+Likewise, we keep a fork of [ProteinMPNN](https://github.com/dauparas/ProteinMPNN). 
+Each of these codebases are actively under development and you may want to refork.
+Go give each of these repos a star if you use this codebase!
+
+## Training
+
+
+### Downloading the PDB for training
 To get the training dataset, first download PDB then preprocess it with our provided scripts.
 PDB can be downloaded from RCSB: https://www.wwpdb.org/ftp/pdb-ftp-sites#rcsbpdb.
 Our scripts assume you download in **mmCIF format**.
@@ -48,15 +75,6 @@ See the script for more options. Each mmCIF will be written as a pickle file tha
 we read and process in the data loading pipeline. A `metadata.csv` will be saved
 that contains the pickle path of each example as well as additional information
 about each example for faster filtering.
-
-### Third party source code
-
-Our repo keeps a fork of [OpenFold](https://github.com/aqlaboratory/openfold) since we made a few changes to the source code.
-Likewise, we keep a fork of [ProteinMPNN](https://github.com/dauparas/ProteinMPNN). 
-Each of these codebases are actively under development and you may want to refork.
-Go give each of these repos a star if you use this codebase!
-
-## Training
 
 `train_se3_diffusion.py` is the training script. It utilizes [Hydra](https://hydra.cc).
 Hydra does a nice thing where it will save the output, config, and overrides of each run to the `outputs/` directory organized by date and time. 
@@ -121,20 +139,3 @@ The terminal will print the paths to which the checkpoint and samples are saved.
 ```
 This can also be found in the config in Wandb by searching `ckpt_dir`.
 Once you have a good run, you can copy and save the weights somewhere for inference.
-
-## Inference
-
-`inference_se3_diffusion.py` is the inference script. It utilizes [Hydra](https://hydra.cc).
-Training can be done with the following.
-```python
-python experiments/inference_se3_diffusion.py
-```
-The config for inference is in `config/inference.yaml`.
-See the config for different inference options.
-By default, inference will use the published paper weights in `weights/paper_weights.pth`.
-Simply change the `weights_path` to use your custom weights.
-```yaml
-inference:
-    weights_path: <path>
-```
-
