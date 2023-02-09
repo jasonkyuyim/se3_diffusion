@@ -55,7 +55,6 @@ def create_pad_feats(pad_amt):
     pad_feats = {        
         'res_mask': torch.ones(pad_amt),
         'fixed_mask': torch.zeros(pad_amt),
-        'aatype_impute': torch.zeros((pad_amt, 21)),
         'rigids_impute': torch.zeros((pad_amt, 4, 4)),
         'torsion_impute': torch.zeros((pad_amt, 7, 2)),
     }
@@ -162,7 +161,6 @@ class Sampler:
             self,
             *,
             rigids_impute,
-            aatype_impute,
             torsion_impute,
             fixed_mask,
             res_mask,
@@ -174,7 +172,6 @@ class Sampler:
         ref_sample = self.diffuser.sample_ref(
             n_samples=num_res,
             rigids_impute=rigids_impute,
-            aatype_impute=aatype_impute,
             diffuse_mask=diffuse_mask,
             as_tensor_7=True,
         )
@@ -182,7 +179,6 @@ class Sampler:
         init_feats = {
             'res_mask': res_mask,
             'seq_idx': res_idx * res_mask,
-            'aatype_probs_0': aatype_impute,
             'fixed_mask': fixed_mask,
             'torsion_angles_sin_cos': torsion_impute,
             'sc_ca_t': torch.zeros_like(rigids_impute.get_trans()),
@@ -218,14 +214,10 @@ class Sampler:
                     continue
                 os.makedirs(sample_dir, exist_ok=True)
                 sample_output = self.sample(sample_length)
-                final_aatype = np.argmax(
-                    sample_output["aatype_probs_traj"][0], axis=-1)
                 traj_paths = self.save_traj(
                     sample_output['prot_traj'],
                     sample_output['rigid_0_traj'],
-                    final_aatype,
                     np.ones(sample_length),
-                    np.zeros(sample_length),
                     output_dir=sample_dir
                 )
 
@@ -246,8 +238,6 @@ class Sampler:
             self,
             bb_prot_traj: np.ndarray,
             x0_traj: np.ndarray,
-            aatype: np.ndarray,
-            res_mask: np.ndarray,
             diffuse_mask: np.ndarray,
             output_dir: str
         ):
@@ -274,38 +264,27 @@ class Sampler:
         """
 
         # Write sample.
-        final_prot = bb_prot_traj[0]
-        res_mask = res_mask.astype(bool)
         diffuse_mask = diffuse_mask.astype(bool)
-
         sample_path = os.path.join(output_dir, 'sample')
         prot_traj_path = os.path.join(output_dir, 'bb_traj')
         x0_traj_path = os.path.join(output_dir, 'x0_traj')
-        prot = final_prot[res_mask]
-        traj = bb_prot_traj[:, res_mask]
-        prot_traj = x0_traj[:, res_mask]
 
         # Use b-factors to specify which residues are diffused.
-        b_factors = np.tile(
-            (diffuse_mask[res_mask] * 100)[:, None], (1, 37))
+        b_factors = np.tile((diffuse_mask * 100)[:, None], (1, 37))
 
-        int_seq = aatype[res_mask]
         sample_path = au.write_prot_to_pdb(
-            prot,
+            bb_prot_traj[0],
             sample_path,
-            aatype=int_seq,
             b_factors=b_factors
         )
         prot_traj_path = au.write_prot_to_pdb(
-            traj,
+            bb_prot_traj,
             prot_traj_path,
-            aatype=int_seq,
             b_factors=b_factors
         )
         x0_traj_path = au.write_prot_to_pdb(
-            prot_traj,
+            x0_traj,
             x0_traj_path,
-            aatype=int_seq,
             b_factors=b_factors
         )
         return {
@@ -454,18 +433,13 @@ class Sampler:
         ref_sample = self.diffuser.sample_ref(
             n_samples=sample_length,
             as_tensor_7=True,
-            aatype_impute=np.ones((sample_length, 21))
         )
         res_idx = torch.arange(1, sample_length+1)
-        zero_aatype = np.zeros((sample_length, 21))
         init_feats = {
             'res_mask': res_mask,
             'seq_idx': res_idx,
-            'chain_idx': torch.ones_like(res_idx),
-            'aatype_probs_0': zero_aatype,
             'fixed_mask': fixed_mask,
             'torsion_angles_sin_cos': np.zeros((sample_length, 7, 2)),
-            'sc_aatype_probs_t': zero_aatype,
             'sc_ca_t': np.zeros((sample_length, 3)),
             **ref_sample,
         }

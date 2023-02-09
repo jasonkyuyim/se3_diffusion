@@ -4,28 +4,20 @@ defaults:
   - override hydra/launcher: joblib
 
 data:
-  csv_path: ./processed_pdb/metadata.csv
+  # CSV for path and metadata to training examples.
+  csv_path: ./data/processed_pdb/metadata.csv
   filtering:
     max_len: 512
     min_len: 60
-    # Set to null for no subset selection.
+    # Selects a subset fo examples. Useful for debugging.
     subset: null
     allowed_oligomer: [monomeric]
     max_helix_percent: 1.0
     max_loop_percent: 0.5
     min_beta_percent: -1.0
-    rog_quantile: 0.0
-  hallucination_percent: 1.0
-  aatype_masking: False
-  mixed_t: False
-  motif_size_min: 10
-  scaffold_size_min: 10
-  scaffold_size_max: 200
   min_t: 0.01
-  has_splits: False
-  samples_per_cath: 1
-  samples_per_eval_length: 4
-  num_eval_lengths: 10
+  samples_per_eval_length: 2 # 4
+  num_eval_lengths: 1  # 10
   num_t: 100
 
 diffuser:
@@ -53,12 +45,9 @@ model:
   edge_embed_size: 128
   dropout: 0.0
   equivariant_rot_score: ${diffuser.so3.equivariant_score}
-  rigid_prediction: True
   embed:
     index_embed_size: 32
     aatype_embed_size: 64
-    embed_aatype: False
-    embed_chain_idx: False
     embed_self_conditioning: True
     num_bins: 22
     min_bin: 1e-5
@@ -66,7 +55,6 @@ model:
   ipa:
     c_s: ${model.node_embed_size}
     c_z: ${model.edge_embed_size}
-    ipa_skip_residual: True
     c_hidden: 256
     c_skip: 64
     no_heads: 8
@@ -77,24 +65,10 @@ model:
     num_blocks: 4
     aatype_head_layers: 2
     coordinate_scaling: ${diffuser.r3.coordinate_scaling}
-    tfmr_skip_residual: True
-    pred_rot_score: False
-    embed_distogram: False
-  se3_tfmr:
-    num_channels: 32
-    num_degrees: 2
-    n_heads: 4
-    div: 4
-    l0_in_features: ${model.node_embed_size}
-    l0_out_features: ${model.node_embed_size}
-    l1_in_features: 2
-    l1_out_features: 2
-    num_edge_features: ${model.edge_embed_size} 
-    num_layers: 2
 
 experiment:
+  # Experiment metadata
   name: baseline
-  wandb_dir: ./
   run_id: null
   log_freq: 1000
   batch_size: 256
@@ -102,37 +76,38 @@ experiment:
   num_loader_workers: 10
   num_epoch: 1000000
   learning_rate: 0.0001
-  use_scheduler: False
   ckpt_dir: ./ckpt/
   max_squared_res: 1000000
   use_gpu: True
-  sample_mode: time_batch
+
+  # Wandb logging
+  wandb_dir: ./
+  use_wandb: False
+
   # How many steps to checkpoint between.
   ckpt_freq: 10000
+  # Take early checkpoint at step 100. Helpful for catching eval bugs early.
   early_ckpt: True
+
   # Checkpoint directory to warm start from.
   warm_start: null
   use_warm_start_conf: False
-  port: 12319
-  dist_mode: multi
   multi_gpu_size: 2
-  use_wandb: False
   prefetch_factor: 100
+
   # Loss weights.
   trans_loss_weight: 1.0
   rot_loss_weight: 1.0
   trans_x0_threshold: 1.0
-  coord_loss_scaling: ${diffuser.r3.coordinate_scaling}
+  coordinate_scaling: ${diffuser.r3.coordinate_scaling}
   bb_atom_loss_weight: 1.0
   bb_atom_loss_t_filter: 0.25
-  bb_atom_scaling: 0.5
-  aatype_loss_weight: 1.0
   dist_mat_loss_weight: 1.0
   dist_mat_loss_t_filter: 0.25
-  dist_mat_scaling: 0.5
-  likelihood_metric: False
+  aux_loss_weight: 25
+
   # Evaluation.
-  eval_dir: ./results
+  eval_dir: ./eval_outputs
   noise_scale: 1.0
   # Filled in during training.
   num_parameters: null

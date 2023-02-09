@@ -1,3 +1,4 @@
+"""Score network module."""
 import torch
 import math
 from torch import nn
@@ -5,8 +6,6 @@ from torch.nn import functional as F
 from data import utils as du
 from data import all_atom
 from model import ipa_pytorch
-from openfold.np import residue_constants
-from openfold.utils import rigid_utils as ru
 import functools as fn
 
 Tensor = torch.Tensor
@@ -64,27 +63,6 @@ class Embedder(nn.Module):
         node_embed_dims += index_embed_size
         edge_in += index_embed_size
 
-        # Chain index embedding
-        if self._embed_conf.embed_chain_idx:
-            node_embed_dims += index_embed_size
-            edge_in += index_embed_size*2
-
-        if self._embed_conf.embed_aatype:
-            aatype_embed_size = self._embed_conf.aatype_embed_size
-            self.aatype_embedder = nn.Sequential(
-                nn.Linear(residue_constants.restype_num+1, aatype_embed_size),
-                nn.ReLU(),
-                nn.Linear(aatype_embed_size, aatype_embed_size),
-                nn.LayerNorm(aatype_embed_size),
-            )
-            node_embed_dims += aatype_embed_size
-            edge_in += aatype_embed_size * 2
-            if self._embed_conf.embed_self_conditioning:
-                node_embed_dims += aatype_embed_size
-                edge_in += aatype_embed_size * 2
-        else:
-            aatype_embed_size = 0
-
         node_embed_size = self._model_conf.node_embed_size
         self.node_embedder = nn.Sequential(
             nn.Linear(node_embed_dims, node_embed_size),
@@ -126,12 +104,8 @@ class Embedder(nn.Module):
             self,
             *,
             seq_idx,
-            chain_idx,
-            t_seq,
-            t_struct,
-            aatype,
+            t,
             fixed_mask,
-            self_conditioning_aatype,
             self_conditioning_ca,
         ):
         """Embeds a set of inputs
@@ -140,8 +114,6 @@ class Embedder(nn.Module):
             seq_idx: [..., N] Positional sequence index for each residue.
             t: Sampled t in [0, 1].
             fixed_mask: mask of fixed (motif) residues.
-            self_conditioning_aatype: [..., N, 21] aatype probabilities of
-                self-conditioning input.
             self_conditioning_ca: [..., N, 3] Ca positions of self-conditioning
                 input.
 
@@ -150,57 +122,21 @@ class Embedder(nn.Module):
             edge_embed: [B, N, N, D_edge]
         """
         num_batch, num_res = seq_idx.shape
-
         node_feats = []
-
-        # Timestep features.
-        t_seq_embed = torch.tile(
-            self.timestep_embedder(t_seq)[:, None, :], (1, num_res, 1))
-
-        # Set time step to epsilon=1e-10 for fixed residues.
-        fixed_t_embed = self.timestep_embedder(
-            torch.ones_like(t_seq)*1e-10)
-
-        fixed_t_embed = torch.tile(fixed_t_embed[:, None, :], (1, num_res, 1))
-        t_embed = t_seq_embed
 
         # Set time step to epsilon=1e-5 for fixed residues.
         fixed_mask = fixed_mask[..., None]
-        prot_t_embed = (
-            t_embed * (1 - fixed_mask)
-            + fixed_t_embed * fixed_mask
-        )
+        prot_t_embed = torch.tile(
+            self.timestep_embedder(t)[:, None, :], (1, num_res, 1))
         prot_t_embed = torch.cat([prot_t_embed, fixed_mask], dim=-1)
         node_feats = [prot_t_embed]
         pair_feats = [self._cross_concat(prot_t_embed, num_batch, num_res)]
 
-        if self._embed_conf.embed_chain_idx:
-            chain_feats = self.index_embedder(chain_idx)
-            node_feats.append(chain_feats)
-            pair_feats.append(
-                self._cross_concat(chain_feats, num_batch, num_res))
-
         # Positional index features.
         node_feats.append(self.index_embedder(seq_idx))
         rel_seq_offset = seq_idx[:, :, None] - seq_idx[:, None, :]
-        if self._embed_conf.embed_chain_idx:
-            # Only embed seq offsets within chains.
-            rel_seq_offset *= chain_idx[:, :, None] == chain_idx[:, None, :]
         rel_seq_offset = rel_seq_offset.reshape([num_batch, num_res**2])
         pair_feats.append(self.index_embedder(rel_seq_offset))
-
-        # Aatype features.
-        if self._embed_conf.embed_aatype:
-            aatype_embed = self.aatype_embedder(aatype)
-            node_feats.append(aatype_embed)
-            pair_feats.append(self._cross_concat(
-                aatype_embed, num_batch, num_res))
-
-            if self._embed_conf.embed_self_conditioning:
-                aatype_embed = self.aatype_embedder(self_conditioning_aatype)
-                node_feats.append(aatype_embed)
-                pair_feats.append(self._cross_concat(
-                    aatype_embed, num_batch, num_res))
 
         # Self-conditioning distogram.
         if self._embed_conf.embed_self_conditioning:
@@ -232,7 +168,7 @@ class ScoreNetwork(nn.Module):
         return diff_mask * aatype_diff + (1 - diff_mask) * aatype_0
 
     def forward(self, input_feats):
-        """forward computes the reverse diffusion conditionals p(X^t|X^{t+1})
+        """Forward computes the reverse diffusion conditionals p(X^t|X^{t+1})
         for each item in the batch
 
         Args:
@@ -248,22 +184,11 @@ class ScoreNetwork(nn.Module):
         fixed_mask = input_feats['fixed_mask'].type(torch.float32)
         edge_mask = bb_mask[..., None] * bb_mask[..., None, :]
 
-        # Ensure unknown aatypes are set to correct token.
-        pad_aatype = torch.eye(residue_constants.restype_num + 1)[-1][None]
-        aatype_t = (
-            input_feats['aatype_probs_t'] * bb_mask[..., None]
-            + pad_aatype[:, None, :].to(bb_mask.device) * (1 - bb_mask[..., None])
-        ).type(torch.float32)
-
         # Initial embeddings of positonal and relative indices.
         init_node_embed, init_edge_embed = self.embedding_layer(
             seq_idx=input_feats['seq_idx'],
-            chain_idx=input_feats['chain_idx'],
-            t_seq=input_feats['t_seq'],
-            t_struct=input_feats['t_struct'],
-            aatype=aatype_t,
+            t=input_feats['t'],
             fixed_mask=fixed_mask,
-            self_conditioning_aatype=input_feats['sc_aatype_probs_t'].type(torch.float32),
             self_conditioning_ca=input_feats['sc_ca_t'],
         )
         edge_embed = init_edge_embed * edge_mask[..., None]
@@ -272,24 +197,7 @@ class ScoreNetwork(nn.Module):
         # Run main network
         model_out = self.score_model(node_embed, edge_embed, input_feats)
 
-        # Logits are of shape [..., 20] where 20 is the number of aatypes.
-        if self._model_conf.aatype_prediction:
-            aatype_logits = model_out['aatype']
-            # Probs are of shape [..., 21] where 21 is the vocab size.
-            # Last token is padding that we set to 0.
-            aatype_probs = torch.nn.functional.softmax(aatype_logits, dim=-1)
-        else:
-            aatype_logits = input_feats['aatype_probs_t'][..., :-1]
-            aatype_probs = input_feats['aatype_probs_t'][..., :-1]
-
-        aatype_probs = torch.cat([
-            aatype_probs,
-            torch.zeros(aatype_probs.shape[:-1] + (1,)).to(
-                aatype_probs.device)
-        ], dim=-1)
-        aatype_probs = self._apply_mask(
-            aatype_probs, input_feats['aatype_probs_0'], 1 - fixed_mask[..., None])
-
+        # Psi angle prediction
         gt_psi = input_feats['torsion_angles_sin_cos'][..., 2, :]
         psi_pred = self._apply_mask(
             model_out['psi'], gt_psi, 1 - fixed_mask[..., None])
@@ -298,14 +206,10 @@ class ScoreNetwork(nn.Module):
             'psi': psi_pred,
             'rot_score': model_out['rot_score'],
             'trans_score': model_out['trans_score'],
-            'aatype_logits': aatype_logits,
-            'aatype_probs': aatype_probs,
         }
-        if self._model_conf.rigid_prediction:
-            rigids_pred = model_out['final_rigids']
-            pred_out['rigids'] = rigids_pred.to_tensor_7()
-            bb_representations = all_atom.compute_backbone(
-                rigids_pred, psi_pred)
-            pred_out['atom37'] = bb_representations[0].to(rigids_pred.device)
-            pred_out['atom14'] = bb_representations[-1].to(rigids_pred.device)
+        rigids_pred = model_out['final_rigids']
+        pred_out['rigids'] = rigids_pred.to_tensor_7()
+        bb_representations = all_atom.compute_backbone(rigids_pred, psi_pred)
+        pred_out['atom37'] = bb_representations[0].to(rigids_pred.device)
+        pred_out['atom14'] = bb_representations[-1].to(rigids_pred.device)
         return pred_out

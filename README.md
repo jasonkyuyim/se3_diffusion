@@ -3,9 +3,11 @@
 Implementation for "SE(3) diffusion model with application to protein backbone generation" [arxiv link](https://arxiv.org/abs/2302.02277).
 While our work is tailored towards protein backbone generation, it is in principle applicable to other domains where SE(3) is utilized.
 
+We welcome pull requests and contributions.
+
 ## Installation
 
-
+> A preprocessed dataset is 
 
 
 ## Training

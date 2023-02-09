@@ -1,4 +1,4 @@
-"""Dataset for SE(3) experiments."""
+"""PDB dataset loader."""
 import tree
 import numpy as np
 import torch
@@ -62,39 +62,17 @@ class PdbDataset(data.Dataset):
         if filter_conf.min_beta_percent is not None:
             pdb_csv = pdb_csv[
                 pdb_csv.strand_percent > filter_conf.min_beta_percent]
-        if filter_conf.rog_quantile > 0.0:
-            prot_rog_low_pass = _rog_quantile_curve(
-                pdb_csv, 
-                filter_conf.rog_quantile,
-                np.arange(filter_conf.max_len))
-            row_rog_cutoffs = pdb_csv.modeled_seq_len.map(
-                lambda x: prot_rog_low_pass[x-1])
-            pdb_csv = pdb_csv[pdb_csv.radius_gyration < row_rog_cutoffs]
         if filter_conf.subset is not None:
             pdb_csv = pdb_csv[:filter_conf.subset]
         pdb_csv = pdb_csv.sort_values('modeled_seq_len', ascending=False)
-
-        if self.data_conf.has_splits:
-            if self.is_training:
-                # TODO: Correct cath data to have split instead of cath_split.
-                self.csv = pdb_csv[pdb_csv.cath_split == 'train']
-                self._log.info(f'CATH training: {len(self.csv)} examples')
-            else:
-                valid_csv = pdb_csv[pdb_csv.cath_split == 'validation']
-                self.csv = valid_csv.groupby('cath_code').sample(
-                    self.data_conf.samples_per_cath,
-                    replace=True,
-                    random_state=123
-                )
-                self._log.info(f'CATH validation: {len(self.csv)} examples from {self.csv.cath_code.tolist()}')
-        else:
-            self._create_split(pdb_csv)
+        self._create_split(pdb_csv)
 
     def _create_split(self, pdb_csv):
         # Training or validation specific logic.
         if self.is_training:
             self.csv = pdb_csv
-            self._log.info(f'Training: {len(self.csv)} examples')
+            self._log.info(
+                f'Training: {len(self.csv)} examples')
         else:
             all_lengths = np.sort(pdb_csv.modeled_seq_len.unique())
             length_indices = (len(all_lengths) - 1) * np.linspace(
@@ -102,11 +80,13 @@ class PdbDataset(data.Dataset):
             length_indices = length_indices.astype(int)
             eval_lengths = all_lengths[length_indices]
             eval_csv = pdb_csv[pdb_csv.modeled_seq_len.isin(eval_lengths)]
+            # Fix a random seed to get the same split each time.
             eval_csv = eval_csv.groupby('modeled_seq_len').sample(
                 self._data_conf.samples_per_eval_length, replace=True, random_state=123)
             eval_csv = eval_csv.sort_values('modeled_seq_len', ascending=False)
             self.csv = eval_csv
-            self._log.info(f'Validation: {len(self.csv)} examples with lengths {eval_lengths}')
+            self._log.info(
+                f'Validation: {len(self.csv)} examples with lengths {eval_lengths}')
 
     @fn.lru_cache(maxsize=50000)
     def _process_csv_row(self, processed_file_path):
@@ -162,9 +142,7 @@ class PdbDataset(data.Dataset):
             'atom37_mask': chain_feats['all_atom_mask'],
             'atom14_pos': chain_feats['atom14_gt_positions'],
             'rigidgroups_0': chain_feats['rigidgroups_gt_frames'],
-            # 'rigidgroups_0_exists': chain_feats['rigidgroups_gt_exists'],
             'torsion_angles_sin_cos': chain_feats['torsion_angles_sin_cos'],
-            # 'torsion_angles_mask': chain_feats['torsion_angles_mask'],
         }
         return final_feats
 
@@ -218,72 +196,38 @@ class PdbDataset(data.Dataset):
         else:
             rng = np.random.default_rng(idx)
 
-        # Inpainting or hallucination.
         gt_bb_rigid = rigid_utils.Rigid.from_tensor_4x4(
             chain_feats['rigidgroups_0'])[:, 0]
-        if (self._data_conf.hallucination_percent is not None) and (rng.random() < self._data_conf.hallucination_percent):
-            diffused_mask = np.ones_like(chain_feats['res_mask'])
-            hallucination = True
-        else:
-            diffused_mask = self._create_diffused_masks(
-                chain_feats['atom37_pos'], rng, csv_row)
-            gt_bb_rigid = du.center_on_motif(gt_bb_rigid, 1 - diffused_mask)
-            hallucination = False
+        diffused_mask = np.ones_like(chain_feats['res_mask'])
         if np.sum(diffused_mask) < 1:
             raise ValueError('Must be diffused')
         fixed_mask = 1 - diffused_mask
         chain_feats['fixed_mask'] = fixed_mask
         chain_feats['rigids_0'] = gt_bb_rigid.to_tensor_7()
-        gt_aatype_probs =  self.diffuser.seq_diffuser.one_hot(
-            chain_feats['aatype'])
-        chain_feats['aatype_probs_0'] = gt_aatype_probs
-        chain_feats['sc_aatype_probs_t'] = np.zeros_like(gt_aatype_probs)
         chain_feats['sc_ca_t'] = torch.zeros_like(gt_bb_rigid.get_trans())
 
         # Sample t and diffuse.
         if self.is_training:
-            t_seq = rng.uniform(self._data_conf.min_t, 1.0)
-            if self._data_conf.mixed_t:
-                t_struct = rng.uniform(self._data_conf.min_t, 1.0)
-            else:
-                t_struct = t_seq
+            t = rng.uniform(self._data_conf.min_t, 1.0)
             diff_feats_t = self._diffuser.forward_marginal(
                 rigids_0=gt_bb_rigid,
-                aatype_probs_0=gt_aatype_probs,
-                t_seq=t_seq,
-                t_struct=t_struct,
-                diffuse_mask=None if hallucination else diffused_mask
+                t=t,
+                diffuse_mask=None
             )
         else:
-            t_seq = 1.0
-            t_struct = 1.0
+            t = 1.0
             diff_feats_t = self.diffuser.sample_ref(
                 n_samples=gt_bb_rigid.shape[0],
-                rigids_impute=gt_bb_rigid,
-                aatype_impute=gt_aatype_probs,
-                diffuse_mask=None if hallucination else diffused_mask,
+                impute=gt_bb_rigid,
+                diffuse_mask=None,
                 as_tensor_7=True,
             )
-        if self._data_conf.aatype_masking:
-            mask_percent = rng.random()
-            aatype_input = diff_feats_t['aatype_probs_t']
-            mask_residue = rng.random((aatype_input.shape[0],)) < mask_percent
-            masked_aatype = np.zeros_like(aatype_input)
-            masked_aatype[:, -1] = 1.0
-            diff_feats_t['aatype_probs_t'] = (
-                masked_aatype * mask_residue[:, None] +
-                aatype_input * (1 - mask_residue)[:, None] 
-            )
         chain_feats.update(diff_feats_t)
-        chain_feats['t_seq'] = t_seq
-        chain_feats['t_struct'] = t_struct
-
+        chain_feats['t'] = t
 
         # Convert all features to tensors.
         final_feats = tree.map_structure(
-            lambda x: x if torch.is_tensor(x) else torch.tensor(x), chain_feats 
-        )
-
+            lambda x: x if torch.is_tensor(x) else torch.tensor(x), chain_feats)
         final_feats = du.pad_feats(final_feats, csv_row['modeled_seq_len'])
         if self.is_training:
             return final_feats
@@ -317,7 +261,6 @@ class TrainSampler(data.Sampler):
             data_conf,
             dataset,
             batch_size,
-            sample_mode,
         ):
         self._data_conf = data_conf
         self._dataset = dataset
@@ -326,27 +269,14 @@ class TrainSampler(data.Sampler):
         self._data_csv['index'] = self._dataset_indices
         self._batch_size = batch_size
         self.epoch = 0
-        self._sample_mode = sample_mode
 
     def __iter__(self):
-        if self._sample_mode == 'length_batch':
-            sampled_order = self._data_csv.groupby('modeled_seq_len').sample(
-                self._batch_size, replace=True, random_state=self.epoch)
-            return iter(sampled_order['index'].tolist())
-        elif self._sample_mode == 'time_batch':
-            random.shuffle(self._dataset_indices)
-            repeated_indices = np.repeat(self._dataset_indices, self._batch_size)
-            return iter(repeated_indices)
-        else:
-            raise ValueError(f'Invalid sample mode: {self._sample_mode}')
+        random.shuffle(self._dataset_indices)
+        repeated_indices = np.repeat(self._dataset_indices, self._batch_size)
+        return iter(repeated_indices)
 
     def set_epoch(self, epoch):
         self.epoch = epoch
 
     def __len__(self):
-        if self._sample_mode == 'length_batch':
-            return len(self._data_csv['modeled_seq_len'].unique()) * self._batch_size
-        elif self._sample_mode == 'time_batch':
-            return len(self._dataset_indices) * self._batch_size
-        else:
-            raise ValueError(f'Invalid sample mode: {self._sample_mode}')
+        return len(self._dataset_indices) * self._batch_size

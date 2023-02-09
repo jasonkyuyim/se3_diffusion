@@ -154,7 +154,8 @@ def compute_backbone(bb_rigids, psi_torsions):
         psi_torsions[..., None, :],
         tuple([1 for _ in range(len(bb_rigids.shape))]) + (7, 1)
     ).to(bb_rigids.device)
-    aatype = torch.zeros(bb_rigids.shape).long().to(bb_rigids.device)
+    aatype = torch.zeros(bb_rigids.shape).long()
+    # aatype = torch.zeros(bb_rigids.shape).long().to(bb_rigids.device)
     all_frames = feats.torsion_angles_to_frames(
         bb_rigids,
         torsion_angles,

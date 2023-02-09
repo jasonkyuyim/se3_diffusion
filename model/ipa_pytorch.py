@@ -6,12 +6,10 @@ import math
 from scipy.stats import truncnorm
 import torch.nn as nn
 from typing import Optional, Callable, List, Sequence
-from openfold.utils import rigid_utils as ru
 from openfold.utils.rigid_utils import Rigid
 from model import utils
 import functools as fn
 from data import all_atom
-from openfold.np import residue_constants
 
 
 def permute_final_dims(tensor: torch.Tensor, inds: List[int]):
@@ -604,9 +602,7 @@ class IpaScore(nn.Module):
                 tfmr_in, ipa_conf.c_s, init="final")
             self.trunk[f'node_transition_{b}'] = StructureModuleTransition(
                 c=ipa_conf.c_s)
-
-            if self._model_conf.rigid_prediction:
-                self.trunk[f'bb_update_{b}'] = BackboneUpdate(ipa_conf.c_s)
+            self.trunk[f'bb_update_{b}'] = BackboneUpdate(ipa_conf.c_s)
 
             if b < ipa_conf.num_blocks-1:
                 # No edge update on the last block.
@@ -616,15 +612,6 @@ class IpaScore(nn.Module):
                     edge_embed_in=edge_in,
                     edge_embed_out=self._model_conf.edge_embed_size,
                 )
-
-        if self._model_conf.rigid_prediction:
-            if self._ipa_conf.pred_rot_score:
-                self.rot_embed = InvariantPointAttention(ipa_conf)
-                self.rot_pred_ln = nn.LayerNorm(ipa_conf.c_s)
-                self.rot_pred = Linear(ipa_conf.c_s, 3, init="final")
-        else:
-            self.trans_pred = Linear(ipa_conf.c_s, 3, init="final")
-            self.rot_pred = Linear(ipa_conf.c_s, 3, init="final")
 
         self.torsion_pred = TorsionAngles(ipa_conf.c_s, 1)
 
@@ -649,73 +636,39 @@ class IpaScore(nn.Module):
                 curr_rigids,
                 node_mask)
             ipa_embed *= node_mask[..., None]
-            if self._ipa_conf.ipa_skip_residual:
-                node_embed = self.trunk[f'ipa_ln_{b}'](node_embed + ipa_embed)
-                seq_tfmr_in = torch.cat([
-                    node_embed, self.trunk[f'skip_embed_{b}'](init_node_embed)
-                ], dim=-1)
-            else:
-                seq_tfmr_in = torch.cat([
-                    self.trunk[f'ipa_ln_{b}'](ipa_embed),
-                    self.trunk[f'skip_embed_{b}'](node_embed)
-                ], dim=-1)
+            node_embed = self.trunk[f'ipa_ln_{b}'](node_embed + ipa_embed)
+            seq_tfmr_in = torch.cat([
+                node_embed, self.trunk[f'skip_embed_{b}'](init_node_embed)
+            ], dim=-1)
             seq_tfmr_out = self.trunk[f'seq_tfmr_{b}'](
                 seq_tfmr_in, src_key_padding_mask=1 - node_mask)
-            if self._ipa_conf.tfmr_skip_residual:
-                node_embed = node_embed + self.trunk[f'post_tfmr_{b}'](seq_tfmr_out)
-            else:
-                node_embed = self.trunk[f'post_tfmr_{b}'](seq_tfmr_out)
+            node_embed = node_embed + self.trunk[f'post_tfmr_{b}'](seq_tfmr_out)
             node_embed = self.trunk[f'node_transition_{b}'](node_embed)
             node_embed = node_embed * node_mask[..., None]
-
-            if self._model_conf.rigid_prediction:
-                scaffold_embed = node_embed * diffuse_mask[..., None]
-                rigid_update = self.trunk[f'bb_update_{b}'](scaffold_embed)
-                curr_rigids = curr_rigids.compose_q_update_vec(
-                    rigid_update, diffuse_mask[..., None])
+            rigid_update = self.trunk[f'bb_update_{b}'](
+                node_embed * diffuse_mask[..., None])
+            curr_rigids = curr_rigids.compose_q_update_vec(
+                rigid_update, diffuse_mask[..., None])
 
             if b < self._ipa_conf.num_blocks-1:
                 edge_embed = self.trunk[f'edge_transition_{b}'](
                     node_embed, edge_embed)
                 edge_embed *= edge_mask[..., None]
+        rot_score = self.diffuser.calc_rot_sore(
+            init_rigids.get_rots(),
+            curr_rigids.get_rots(),
+            input_feats['t']
+        )
+        rot_score = rot_score * node_mask[..., None]
 
-        if self._model_conf.rigid_prediction:
-            if self._ipa_conf.pred_rot_score:
-                imputed_rigids = ru.Rigid(
-                    init_rots,
-                    curr_rigids.get_trans(),
-                )
-                rot_embed = self.rot_embed(
-                    node_embed,
-                    edge_embed,
-                    imputed_rigids,
-                    node_mask
-                )
-                rot_embed = self.rot_pred_ln(node_embed + rot_embed)
-                rot_score = self.rot_pred(rot_embed)
-                rot_score = rot_score * input_feats['rot_score_scaling'][:, None, None]
-            else:
-                rot_score = self.diffuser.calc_rot_sore(
-                    init_rigids.get_rots(),
-                    curr_rigids.get_rots(),
-                    input_feats['t_struct']
-                )
-            rot_score = rot_score * node_mask[..., None]
-
-            curr_rigids = self.unscale_rigids(curr_rigids)
-            trans_score = self.diffuser.calc_trans_score(
-                init_rigids.get_trans(),
-                curr_rigids.get_trans(),
-                input_feats['t_struct'][:, None, None],
-                use_torch=True,
-            )
-            trans_score = trans_score * node_mask[..., None]
-        else:
-            trans_score = self.trans_pred(node_embed) * node_mask[..., None]
-            trans_score = init_rots.apply(trans_score)
-            trans_score = trans_score * input_feats['trans_score_scaling'][:, None, None]
-            trans_score = trans_score * node_mask[..., None]
-            rot_score = self.rot_pred(node_embed) * node_mask[..., None]
+        curr_rigids = self.unscale_rigids(curr_rigids)
+        trans_score = self.diffuser.calc_trans_score(
+            init_rigids.get_trans(),
+            curr_rigids.get_trans(),
+            input_feats['t'][:, None, None],
+            use_torch=True,
+        )
+        trans_score = trans_score * node_mask[..., None]
 
         if self._model_conf.equivariant_rot_score:
             rot_score = init_rots.apply(rot_score)
@@ -724,9 +677,7 @@ class IpaScore(nn.Module):
         model_out = {
             'psi': psi_pred,
             'rot_score': rot_score,
-            'trans_score': trans_score
+            'trans_score': trans_score,
+            'final_rigids': curr_rigids,
         }
-
-        if self._model_conf.rigid_prediction:
-            model_out['final_rigids'] = curr_rigids 
         return model_out

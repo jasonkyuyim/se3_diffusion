@@ -1,11 +1,13 @@
 .vscode/
 .cache/
-pkl_jar/
 wandb/
 outputs/
+eval_outputs/
+train_outputs/
+inference_outputs/
 data/processed_pdb/
 ckpt/
 multirun/
-inference_outputs/
-train_outputs/
 **/*.egg-info
+**/__pycache__/
+**/.ipynb_checkpoints/

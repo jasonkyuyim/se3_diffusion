@@ -82,21 +82,10 @@ def protein_metrics(
         *,
         pdb_path,
         atom37_pos,
-        aatype_probs,
         gt_atom37_pos,
         gt_aatype,
         diffuse_mask,
     ):
-
-    # Sequence similarity
-    discrete_aatype = np.argmax(aatype_probs, axis=-1)
-    aatype_mask = (gt_aatype < residue_constants.unk_restype_index).astype(int)
-    aatype_mask *= diffuse_mask
-    known_aatype = gt_aatype * aatype_mask
-    seq_similarity = np.sum(
-        (discrete_aatype == known_aatype) * aatype_mask
-    ) / np.sum(aatype_mask)
-    perplexity = calc_perplexity(aatype_probs, known_aatype, aatype_mask)
 
     # SS percentage
     mdtraj_metrics = calc_mdtraj_metrics(pdb_path)
@@ -122,8 +111,6 @@ def protein_metrics(
         unpad_pred_scaffold_pos, unpad_gt_scaffold_pos, seq, seq)
 
     metrics_dict = {
-        'perplexity': perplexity,
-        'sequence_similarity': seq_similarity,
         'ca_ca_bond_dev': ca_ca_bond_dev,
         'ca_ca_valid_percent': ca_ca_valid_percent,
         'ca_steric_clash_percent': ca_steric_clash_percent,
