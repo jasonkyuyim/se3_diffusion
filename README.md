@@ -76,6 +76,7 @@ we read and process in the data loading pipeline. A `metadata.csv` will be saved
 that contains the pickle path of each example as well as additional information
 about each example for faster filtering.
 
+### Launching training 
 `train_se3_diffusion.py` is the training script. It utilizes [Hydra](https://hydra.cc).
 Hydra does a nice thing where it will save the output, config, and overrides of each run to the `outputs/` directory organized by date and time. 
 
