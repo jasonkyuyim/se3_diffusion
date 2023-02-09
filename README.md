@@ -9,7 +9,7 @@ While our work is tailored towards protein backbone generation, it is in princip
 We welcome pull requests (especially bugs) and contributions.
 We will try out best to improve readability and answer questions!
 
-![framediff-landing-page](https://github.com/jasonkyuyim/se3_diffusion/blob/master/media/denoising_framediff.gif)
+![framediff-landing-page](https://github.com/jasonkyuyim/se3_diffusion/blob/master/media/denoising.gif)
 
 ## Installation
 
