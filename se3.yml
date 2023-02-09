@@ -1,5 +1,9 @@
-name: se3_diffusion
+name: se3
 channels:
+  - pytorch
+  - nvidia
+  - anaconda
+  - conda-forge
   - defaults
 dependencies:
   - _libgcc_mutex=0.1
@@ -216,4 +220,3 @@ dependencies:
       - tmtools==0.0.2
       - tqdm==4.64.1
       - wandb==0.13.10
-prefix: /data/rsg/chemistry/jyim/miniconda3/envs/se3_diffusion
