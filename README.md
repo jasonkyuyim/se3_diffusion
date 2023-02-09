@@ -44,7 +44,7 @@ inference:
 
 Our repo keeps a fork of [OpenFold](https://github.com/aqlaboratory/openfold) since we made a few changes to the source code.
 Likewise, we keep a fork of [ProteinMPNN](https://github.com/dauparas/ProteinMPNN).
-We use copied and adapted several files from the DeepMind AlphaFold repository, primarily in `/data/`, and have left the DeepMind license at the top of these files.
+We use copied and adapted several files from the [AlphaFold](https://github.com/deepmind/alphafold) primarily in `/data/`, and have left the DeepMind license at the top of these files.
 Each of these codebases are actively under development and you may want to refork.
 Go give each of these repos a star if you use this codebase!
 
