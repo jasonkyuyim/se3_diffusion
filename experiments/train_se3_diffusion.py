@@ -638,7 +638,6 @@ class Experiment:
             num_t=None,
             min_t=None,
             center=True,
-            ode=False,
             aux_traj=False,
             self_condition=True,
             noise_scale=1.0,
@@ -647,7 +646,6 @@ class Experiment:
 
         Args:
             data_init: Initial data values for sampling.
-            ode: set true to use probability flow ODE instead of stochastic dynamics
         """
 
         # Run reverse process.
@@ -692,7 +690,6 @@ class Experiment:
                         t=t,
                         dt=dt,
                         center=center,
-                        ode=ode,
                         noise_scale=noise_scale,
                     )
                 else:

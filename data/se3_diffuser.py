@@ -53,7 +53,7 @@ class SE3Diffuser:
             t: continuous time in [0, 1].
 
         Returns:
-            rigids_t: [..., N] noised rigid. [..., N, 7] if as_tensor_7 is true. 
+            rigids_t: [..., N] noised rigid. [..., N, 7] if as_tensor_7 is true.
             trans_score: [..., N, 3] translation score
             rot_score: [..., N, 3] rotation score
             trans_score_norm: [...] translation score norm
@@ -166,7 +166,6 @@ class SE3Diffuser:
             dt: float,
             diffuse_mask: np.ndarray = None,
             center: bool=True,
-            ode: bool=False,
             noise_scale: float=1.0,
         ):
         """Reverse sampling function from (t) to (t-1).
@@ -179,11 +178,9 @@ class SE3Diffuser:
             dt: continuous step size in [0, 1].
             mask: [..., N] which residues to update.
             center: true to set center of mass to zero after step
-            ode: true to us deterministic dynamics
 
         Returns:
             rigid_t_1: [..., N] protein rigid objects at time t-1.
-            divergence: [...] divergence term (return only if ode is true)
         """
         trans_t, rot_t = _extract_trans_rots(rigid_t)
         if not self._diffuse_rot:
@@ -194,7 +191,6 @@ class SE3Diffuser:
                 score_t=rot_score,
                 t=t,
                 dt=dt,
-                ode=ode,
                 noise_scale=noise_scale,
                 )
         if not self._diffuse_trans:
@@ -206,7 +202,6 @@ class SE3Diffuser:
                 t=t,
                 dt=dt,
                 center=center,
-                ode=ode,
                 noise_scale=noise_scale
                 )
 

@@ -27,7 +27,7 @@ class R3Diffuser:
         if np.any(t < 0) or np.any(t > 1):
             raise ValueError(f'Invalid t={t}')
         return self.min_b + t*(self.max_b - self.min_b)
-    
+
     def diffusion_coef(self, t):
         """Time-dependent diffusion coefficient."""
         return np.sqrt(self.b_t(t))
@@ -54,7 +54,7 @@ class R3Diffuser:
 
         Args:
             x_0: [..., n, 3] initial positions in Angstroms.
-            t: continuous time in [0, 1]. 
+            t: continuous time in [0, 1].
 
         Returns:
             x_t: [..., n, 3] positions at time t in Angstroms.
@@ -67,7 +67,7 @@ class R3Diffuser:
         z_t_1 = torch.tensor(np.random.normal(size=x_t_1.shape)).to(x_t_1.device)
         x_t = torch.sqrt(1 - b_t) * x_t_1 + torch.sqrt(b_t) * z_t_1
         return x_t
-    
+
     def distribution(self, x_t, score_t, t, mask, dt):
         x_t = self._scale(x_t)
         g_t = self.diffusion_coef(t)
@@ -83,7 +83,7 @@ class R3Diffuser:
 
         Args:
             x_0: [..., n, 3] initial positions in Angstroms.
-            t: continuous time in [0, 1]. 
+            t: continuous time in [0, 1].
 
         Returns:
             x_t: [..., n, 3] positions at time t in Angstroms.
@@ -112,7 +112,6 @@ class R3Diffuser:
             dt: float,
             mask: np.ndarray=None,
             center: bool=True,
-            ode: bool=False,
             noise_scale: float=1.0,
         ):
         """Simulates the reverse SDE for 1 step
@@ -132,13 +131,8 @@ class R3Diffuser:
         x_t = self._scale(x_t)
         g_t = self.diffusion_coef(t)
         f_t = self.drift_coef(x_t, t)
-        if ode:
-            # Probability flow ODE
-            perturb = (f_t - (1/2)*(g_t**2) * score_t) * dt
-        else:
-            # Usual stochastic dynamics
-            z = noise_scale * np.random.normal(size=score_t.shape)
-            perturb = (f_t - g_t**2 * score_t) * dt + g_t * np.sqrt(dt) * z
+        z = noise_scale * np.random.normal(size=score_t.shape)
+        perturb = (f_t - g_t**2 * score_t) * dt + g_t * np.sqrt(dt) * z
 
         if mask is not None:
             perturb *= mask[..., None]
