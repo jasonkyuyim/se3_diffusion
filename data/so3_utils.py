@@ -20,7 +20,11 @@ def vee(A):
     return vee_A
 
 # Logarithmic map from SO(3) to R^3 (i.e. rotation vector)
-def Log(R): return torch.tensor(Rotation.from_matrix(R.numpy()).as_rotvec())
+def Log(R):
+    shape = list(R.shape[:-2])
+    R_ = R.reshape([-1, 3, 3])
+    Log_R_ = torch.tensor(Rotation.from_matrix(R_.numpy()).as_rotvec())
+    return Log_R_.reshape(shape + [3])
 
 # logarithmic map from SO(3) to so(3), this is the matrix logarithm
 def log(R): return hat(Log(R))

@@ -87,8 +87,7 @@ class SO3Diffuser:
         score_norms_t = torch.tensor(score_norms_t).to(vec.device)
         omega_idx = torch.bucketize(
             omega, torch.tensor(self.igso3._discrete_omegas[:-1]).to(vec.device))
-        omega_score_t = torch.gather(
-            score_norms_t, 1, omega_idx)
+        omega_score_t = torch.gather(score_norms_t, 1, omega_idx)
         return omega_score_t[..., None] * vec / (omega[..., None] + eps)
 
     def score_scaling(self, t: np.ndarray):
@@ -108,11 +107,14 @@ class SO3Diffuser:
         """
         # TODO change this to take and return 3x3 rotation matrices
         n_samples = np.cumprod(rots_0.shape[:-1])[-1]
-        sampled_rots = self.sample(t, n_samples=n_samples)
-        rot_score = self.score(sampled_rots, t).reshape(rots_0.shape)
+        R_0 = so3_utils.Exp(torch.tensor(rots_0)) # rotvec to matrix
+        sampled_rots = self.igso3.sample(t, n_samples=n_samples)
+        rot_score = self.torch_score(sampled_rots, t).reshape(rots_0.shape)
+        rot_score = rot_score.numpy().astype(rot_t.dtype)
 
-        # Left multiply.
-        rot_t = du.compose_rotvec(sampled_rots, rots_0).reshape(rots_0.shape)
+        #rot_t = du.compose_rotvec(sampled_rots, rots_0).reshape(rots_0.shape)
+        R_t = torch.einsum('...ij,...jk->...ik', sampled_rots, R_0)
+        rot_t = so3_utils.Log(R_t).numpy().astype(rot_t.dtype)
         return rot_t, rot_score
 
     def reverse(
@@ -124,7 +126,7 @@ class SO3Diffuser:
             mask: np.ndarray=None,
             noise_scale: float=1.0,
             ):
-        """Simulates the reverse SDE for 1 step
+        """Simulates the reverse SDE for 1 step using the Geodesic random walk.
 
         Args:
             rot_t: [..., 3] current rotations at time t.
@@ -137,20 +139,20 @@ class SO3Diffuser:
         Returns:
             [..., 3] rotation vector at next step.
         """
-        if not np.isscalar(t):
-            raise ValueError(f'{t} must be a scalar.')
+        if not np.isscalar(t): raise ValueError(f'{t} must be a scalar.')
+
+        R_t = so3_utils.Exp(torch.tensor(rot_t)) # rotvec to matrix
+        # compute score as 3x3 matrix in tangent space at R_t
+        # for rotvec score, R @ hat(R^T @ score_t)
+        score_t = torch.einsum('...ij,...jk->...ik',
+                R_t,
+                so3_utils.hat(torch.einsum('...ji,...j->...i', R_t,
+                    torch.tensor(score_t, dtype=R_t.dtype)))
+                )
+
         g_t = self.diffusion_coef(t)
-        z = noise_scale * np.random.normal(size=score_t.shape)
-        perturb = (g_t ** 2) * score_t * dt + g_t * np.sqrt(dt) * z
-
-        if mask is not None: perturb *= mask[..., None]
-        n_samples = np.cumprod(rot_t.shape[:-1])[-1]
-
-        # TODO: change to use expmap that's easily identifiable as a sigle step
-        # of geodesic random walk.
-        # Left multiply.
-        rot_t_1 = du.compose_rotvec(
-            perturb.reshape(n_samples, 3),
-            rot_t.reshape(n_samples, 3),
-        ).reshape(rot_t.shape)
+        perturb = ( g_t ** 2 ) * dt * score_t + noise_scale * g_t * np.sqrt(dt) * so3_utils.tangent_gaussian(R_t)
+        if mask is not None: perturb *= mask[..., None, None]
+        R_t_1 = so3_utils.expmap(R_t, perturb)
+        rot_t_1 = so3_utils.Log(R_t_1).numpy().astype(rot_t.dtype)
         return rot_t_1
