@@ -20,7 +20,7 @@ class SO3Diffuser:
 
         # Discretize omegas for calculating CDFs. Skip omega=0.
         self.igso3 = igso3.IGSO3(min_t=self.min_sigma**2, max_t=self.max_sigma**2,
-                L=500, num_ts=self.num_sigma, num_omegas=so3_conf.num_omega, cache_dir=so3_conf.cache_dir)
+                L=2000, num_ts=self.num_sigma, num_omegas=so3_conf.num_omega, cache_dir=so3_conf.cache_dir)
 
         self._score_scaling = np.sqrt(np.abs(
             np.sum(
@@ -30,9 +30,7 @@ class SO3Diffuser:
 
     @property
     def discrete_sigma(self):
-        return self.sigma(
-            np.linspace(0.0, 1.0, self.num_sigma)
-        )
+        return self.sigma(np.linspace(0.0, 1.0, self.num_sigma))
 
     def sigma_idx(self, sigma: np.ndarray):
         """Calculates the index for discretized sigma during IGSO(3) initialization."""
@@ -59,67 +57,53 @@ class SO3Diffuser:
 
 
     def sample_ref(self, n_samples: float=1):
-        return so3_utils.Log(so3_utils.sample_uniform(n_samples)).numpy()
+        return so3_utils.sample_uniform(n_samples)
 
-    def torch_score(
-            self,
-            vec: torch.tensor,
-            t: torch.tensor,
-            eps: float=1e-6
-        ):
-        """Computes the score of IGSO(3) density as a rotation vector.
-
-
-        Same as score function but uses pytorch and performs a look-up.
+    def torch_score(self, R: torch.tensor, R_0: torch.tensor, t: torch.tensor, eps: float=1e-6):
+        """Computes the score of IGSO(3) density
 
         Args:
-            vec: [..., 3] array of axis-angle rotation vectors.
+            R: [..., 3, 3] array of rotation matrices at which to compute the score.
+            R_0: [..., 3, 3] initial rotations used for IGSO3 location
+                parameter.
             t: continuous time in [0, 1].
 
         Returns:
-            [..., 3] score vector in the direction of the sampled vector with
+            [..., 3, 3] score vector in the direction of the sampled vector with
             magnitude given by _score_norms.
         """
-        # TODO: Change this to use self.igso3.score (which actually returns
-        # something in the tangent space)
-        omega = torch.linalg.norm(vec, dim=-1)
-        score_norms_t = self.igso3._d_logf_d_omega[self.igso3.t_idx(du.move_to_np(t))]
-        score_norms_t = torch.tensor(score_norms_t).to(vec.device)
-        omega_idx = torch.bucketize(
-            omega, torch.tensor(self.igso3._discrete_omegas[:-1]).to(vec.device))
-        omega_score_t = torch.gather(score_norms_t, 1, omega_idx)
-        return omega_score_t[..., None] * vec / (omega[..., None] + eps)
+        R_0t = torch.einsum('...ji,...jk->...ik', R_0, R)
+        score = torch.einsum(
+                '...ij,...jk->...ik',
+                R_0, self.igso3.score(R_0t, t, eps).to(R_0.dtype))
+        return score
 
     def score_scaling(self, t: np.ndarray):
         """Calculates scaling used for scores during trianing."""
         return self._score_scaling[self.igso3.t_idx(t)]
 
-    def forward_marginal(self, rots_0: np.ndarray, t: float):
+    def forward_marginal(self, R_0: np.ndarray, t: float):
         """Samples from the forward diffusion process at time index t.
 
         Args:
-            rots_0: [..., 3] initial rotations.
+            R_0: [..., 3, 3] initial rotations.
             t: continuous time in [0, 1].
 
         Returns:
-            rot_t: [..., 3] noised rotation vectors.
-            rot_score: [..., 3] score of rot_t as a rotation vector.
+            R_t: [..., 3, 3] noised rotation vectors.
+            rot_score: [..., 3, 3] score of rot_t as a rotation vector.
         """
-        # TODO change this to take and return 3x3 rotation matrices
-        n_samples = np.cumprod(rots_0.shape[:-1])[-1]
-        R_0 = so3_utils.Exp(torch.tensor(rots_0)) # rotvec to matrix
+        n_samples = np.cumprod(R_0.shape[:-2])[-1]
+        R_0 = torch.tensor(R_0) # rotvec to matrix
         sampled_rots = self.igso3.sample(t, n_samples=n_samples)
-        rot_score = self.torch_score(sampled_rots, t).reshape(rots_0.shape)
-        rot_score = rot_score.numpy().astype(rot_t.dtype)
-
-        #rot_t = du.compose_rotvec(sampled_rots, rots_0).reshape(rots_0.shape)
+        rot_score = self.torch_score(sampled_rots, t).reshape(R_0.shape)
+        rot_score = rot_score.numpy().astype(R_0.dtype)
         R_t = torch.einsum('...ij,...jk->...ik', sampled_rots, R_0)
-        rot_t = so3_utils.Log(R_t).numpy().astype(rot_t.dtype)
-        return rot_t, rot_score
+        return R_t, rot_score
 
     def reverse(
             self,
-            rot_t: np.ndarray,
+            R_t: np.ndarray,
             score_t: np.ndarray,
             t: float,
             dt: float,
@@ -141,18 +125,10 @@ class SO3Diffuser:
         """
         if not np.isscalar(t): raise ValueError(f'{t} must be a scalar.')
 
-        R_t = so3_utils.Exp(torch.tensor(rot_t)) # rotvec to matrix
-        # compute score as 3x3 matrix in tangent space at R_t
-        # for rotvec score, R @ hat(R^T @ score_t)
-        score_t = torch.einsum('...ij,...jk->...ik',
-                R_t,
-                so3_utils.hat(torch.einsum('...ji,...j->...i', R_t,
-                    torch.tensor(score_t, dtype=R_t.dtype)))
-                )
-
+        # Convert to pytorch tensors
+        R_t_, score_t_ = torch.tensor(R_t), torch.tensor(score_t)
         g_t = self.diffusion_coef(t)
-        perturb = ( g_t ** 2 ) * dt * score_t + noise_scale * g_t * np.sqrt(dt) * so3_utils.tangent_gaussian(R_t)
+        perturb = ( g_t ** 2 ) * dt * score_t_ + noise_scale * g_t * np.sqrt(dt) * so3_utils.tangent_gaussian(R_t_)
         if mask is not None: perturb *= mask[..., None, None]
-        R_t_1 = so3_utils.expmap(R_t, perturb)
-        rot_t_1 = so3_utils.Log(R_t_1).numpy().astype(rot_t.dtype)
-        return rot_t_1
+        R_t_1 = so3_utils.expmap(R_t_, perturb.to(R_t_.dtype)).numpy().astype(R_t.dtype)
+        return R_t_1

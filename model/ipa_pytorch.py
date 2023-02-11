@@ -377,7 +377,7 @@ class InvariantPointAttention(nn.Module):
         ##########################
         # [*, N_res, N_res, H]
         b = self.linear_b(z[0])
-        
+
         if(_offload_inference):
             z[0] = z[0].cpu()
 
@@ -411,8 +411,8 @@ class InvariantPointAttention(nn.Module):
 
         # [*, H, N_res, N_res]
         pt_att = permute_final_dims(pt_att, (2, 0, 1))
-        
-        a = a + pt_att 
+
+        a = a + pt_att
         a = a + square_mask.unsqueeze(-3)
         a = self.softmax(a)
 
@@ -427,7 +427,7 @@ class InvariantPointAttention(nn.Module):
         # [*, N_res, H * C_hidden]
         o = flatten_final_dims(o, 2)
 
-        # [*, H, 3, N_res, P_v] 
+        # [*, H, 3, N_res, P_v]
         o_pt = torch.sum(
             (
                 a[..., None, :, :, None]
@@ -466,7 +466,7 @@ class InvariantPointAttention(nn.Module):
                 o_feats, dim=-1
             ).to(dtype=z[0].dtype)
         )
-        
+
         return s
 
 
@@ -547,7 +547,7 @@ class BackboneUpdate(nn.Module):
         Args:
             [*, N_res, C_s] single representation
         Returns:
-            [*, N_res, 6] update vector 
+            [*, N_res, 6] update vector
         """
         # [*, 6]
         update = self.linear(s)
@@ -645,12 +645,15 @@ class IpaScore(nn.Module):
                 edge_embed = self.trunk[f'edge_transition_{b}'](
                     node_embed, edge_embed)
                 edge_embed *= edge_mask[..., None]
-        rot_score = self.diffuser.calc_rot_sore(
+
+        # Compute score approximation as the conditional score (using IGSO3
+        # transition kernel)
+        rot_score = self.diffuser.calc_rot_score(
             init_rigids.get_rots(),
             curr_rigids.get_rots(),
             input_feats['t']
-        )
-        rot_score = rot_score * node_mask[..., None]
+        ).to(init_rigids.device)
+        rot_score = rot_score * node_mask[..., None, None]
 
         curr_rigids = self.unscale_rigids(curr_rigids)
         trans_score = self.diffuser.calc_trans_score(
@@ -660,9 +663,6 @@ class IpaScore(nn.Module):
             use_torch=True,
         )
         trans_score = trans_score * node_mask[..., None]
-
-        # Rotate invariate output from IPA into the reference frame, such that rot-score is an equivariant quantity
-        rot_score = init_rots.apply(rot_score)
 
         _, psi_pred = self.torsion_pred(node_embed)
         model_out = {
