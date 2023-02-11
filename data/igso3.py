@@ -183,7 +183,7 @@ class IGSO3:
     def d_logf_d_omega(self, omega, t):
         return np.interp(omega, self._discrete_omegas, self._d_logf_d_omega[self.t_idx(t)])
 
-    def score(self, R: torch.tensor, t: torch.tensor, eps: float=1e-6):
+    def score(self, R: torch.tensor, t: float, eps: float=1e-6):
         """Computes the score of IGSO(3) density as a rotation vector.
 
         Same as score function but uses pytorch and performs a look-up.
@@ -198,12 +198,12 @@ class IGSO3:
             magnitude given by _d_logf_d_omega.
         """
         omega = so3_utils.Omega(R)
-        d_logf_d_omega_by_omega = self._d_logf_d_omega[self.t_idx(t)]
+        d_logf_d_omega_by_omega = self._d_logf_d_omega[self.t_idx(float(t))]
         d_logf_d_omega_by_omega = torch.tensor(d_logf_d_omega_by_omega).to(R.device)
         omega_idx = torch.bucketize(omega, torch.tensor(self._discrete_omegas[:-1]).to(R.device))
         d_logf_d_omega = d_logf_d_omega_by_omega[omega_idx]
 
         # Unit vector in tangent space
-        direction = torch.einsum('Njk,Nkl->Njl',
+        direction = torch.einsum('...jk,...kl->...jl',
                 R, so3_utils.log(R)/(omega[..., None, None] + eps))
         return direction * d_logf_d_omega[..., None, None]

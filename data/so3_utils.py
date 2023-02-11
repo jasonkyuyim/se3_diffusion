@@ -41,6 +41,7 @@ def Omega(R): return torch.arccos((torch.diagonal(R, dim1=-2, dim2=-1).sum(dim=-
 # exponential map from tangent space at R0 to SO(3)
 def expmap(R0, tangent):
     skew_sym = torch.einsum('...ij,...ik->...jk', R0, tangent)
+    assert torch.allclose(skew_sym, -skew_sym.transpose(-1, -2), atol=1e-4), "R0.T @ tangent must be skew symmetric"
     skew_sym = (skew_sym - torch.transpose(skew_sym, -2, -1))/2.
     exp_skew_sym = exp(skew_sym)
     return torch.einsum('...ij,...jk->...ik', R0, exp_skew_sym)

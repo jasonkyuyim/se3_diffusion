@@ -9,6 +9,7 @@ import dataclasses
 from data import chemical
 from data import residue_constants
 from data import protein
+from data import so3_utils
 from openfold.utils import rigid_utils
 from scipy.spatial.transform import Rotation
 from Bio import PDB
@@ -71,7 +72,7 @@ def write_pkl(
 
 
 def read_pkl(read_path: str, verbose=True, use_torch=False, map_location=None):
-    """Read data from a pickle file."""    
+    """Read data from a pickle file."""
     try:
         if use_torch:
             return torch.load(read_path, map_location=map_location)
@@ -256,7 +257,7 @@ def parse_a3m(filename):
     table = str.maketrans(dict.fromkeys(string.ascii_lowercase))
 
     #print(filename)
-    
+
     if filename.split('.')[-1] == 'gz':
         fp = gzip.open(filename, 'rt')
     else:
@@ -268,7 +269,7 @@ def parse_a3m(filename):
         # skip labels
         if line[0] == '>':
             continue
-            
+
         # remove right whitespaces
         line = line.rstrip()
 
@@ -447,20 +448,20 @@ def pad_pdb_feats(raw_feats, max_len):
 
 def process_chain(chain: Chain, chain_id: str) -> Protein:
     """Convert a PDB chain object into a AlphaFold Protein instance.
-    
+
     Forked from alphafold.common.protein.from_pdb_string
-    
+
     WARNING: All non-standard residue types will be converted into UNK. All
         non-standard atoms will be ignored.
-    
+
     Took out lines 94-97 which don't allow insertions in the PDB.
     Sabdab uses insertions for the chothia numbering so we need to allow them.
-    
+
     Took out lines 110-112 since that would mess up CDR numbering.
-    
+
     Args:
         chain: Instance of Biopython's chain class.
-    
+
     Returns:
         Protein object with protein features.
     """
@@ -580,6 +581,10 @@ def quat_to_rotvec(quat, eps=1e-6):
     rot_vec_scale = small_angle_scales * small_angles + (1 - small_angles) * large_angle_scales
     rot_vec = rot_vec_scale[..., None] * quat[..., 1:]
     return rot_vec
+
+def quat_to_rotmat(quat, eps=1e-6):
+    rot_vec = quat_to_rotvec(quat, eps)
+    return so3_utils.Exp(rot_vec)
 
 def save_fasta(
         pred_seqs,
