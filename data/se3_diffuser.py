@@ -105,6 +105,7 @@ class SE3Diffuser:
             trans_t, trans_0, t, use_torch=use_torch, scale=scale)
 
     def calc_rot_score(self, R_t, R_0, t):
+        """Returns conditional score as object in tangent space at R_t"""
         return self._so3_diffuser.torch_score(R_t.get_rot_mats().cpu(),
                 R_0.get_rot_mats().cpu(), t.cpu())
 
@@ -197,7 +198,7 @@ class SE3Diffuser:
             assert impute.shape[0] == n_samples
             trans_impute, rot_impute = _extract_trans_rots(impute)
             trans_impute = trans_impute.reshape((n_samples, 3))
-            rot_impute = rot_impute.reshape((n_samples, 3))
+            rot_impute = rot_impute.reshape((n_samples, 3, 3))
             trans_impute = self._r3_diffuser._scale(trans_impute)
 
         if diffuse_mask is not None and impute is None:
