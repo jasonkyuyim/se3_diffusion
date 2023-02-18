@@ -199,7 +199,7 @@ class Experiment:
         self._log.info('Initializing Wandb.')
         conf_dict = OmegaConf.to_container(self._conf, resolve=True)
         wandb.init(
-            project='protein-diffusion-v2',
+            project='se3-diffusion',
             name=self._exp_conf.name,
             config=dict(eu.flatten_dict(conf_dict)),
             dir=self._exp_conf.wandb_dir,
@@ -215,8 +215,8 @@ class Experiment:
             replica_id = int(HydraConfig.get().job.num)
         else:
             replica_id = 0
-            if self._use_wandb:
-                self.init_wandb()
+        if self._use_wandb and replica_id == 0:
+            self.init_wandb()
 
         if torch.cuda.is_available() and self._exp_conf.use_gpu:
             gpu_id = self._available_gpus[replica_id]
@@ -305,7 +305,6 @@ class Experiment:
                     logger=self._log, use_torch=True)
 
                 # Run evaluation
-                # TODO: Dispatch eval as a subprocess.
                 self._log.info(f'Running evaluation of {ckpt_path}')
                 start_time = time.time()
                 eval_dir = os.path.join(
@@ -330,8 +329,6 @@ class Experiment:
                     'loss': loss,
                     'rotation_loss': aux_data['rot_loss'],
                     'translation_loss': aux_data['trans_loss'],
-                    'psi_loss': aux_data['psi_loss'],
-                    'aatype_loss': aux_data['aatype_loss'],
                     'bb_atom_loss': aux_data['bb_atom_loss'],
                     'dist_mat_loss': aux_data['batch_dist_mat_loss'],
                     'batch_size': aux_data['examples_per_step'],
@@ -342,37 +339,25 @@ class Experiment:
 
                 # Stratified losses
                 wandb_logs.update(eu.t_stratified_loss(
-                    du.move_to_np(train_feats['t_struct']),
+                    du.move_to_np(train_feats['t']),
                     du.move_to_np(aux_data['batch_rot_loss']),
                     loss_name='rot_loss',
                 ))
 
                 wandb_logs.update(eu.t_stratified_loss(
-                    du.move_to_np(train_feats['t_struct']),
+                    du.move_to_np(train_feats['t']),
                     du.move_to_np(aux_data['batch_trans_loss']),
                     loss_name='trans_loss',
                 ))
 
                 wandb_logs.update(eu.t_stratified_loss(
-                    du.move_to_np(train_feats['t_struct']),
-                    du.move_to_np(aux_data['batch_psi_loss']),
-                    loss_name='psi_loss',
-                ))
-
-                wandb_logs.update(eu.t_stratified_loss(
-                    du.move_to_np(train_feats['t_seq']),
-                    du.move_to_np(aux_data['batch_aatype_loss']),
-                    loss_name='aatype_loss',
-                ))
-
-                wandb_logs.update(eu.t_stratified_loss(
-                    du.move_to_np(train_feats['t_struct']),
+                    du.move_to_np(train_feats['t']),
                     du.move_to_np(aux_data['batch_bb_atom_loss']),
                     loss_name='bb_atom_loss',
                 ))
 
                 wandb_logs.update(eu.t_stratified_loss(
-                    du.move_to_np(train_feats['t_struct']),
+                    du.move_to_np(train_feats['t']),
                     du.move_to_np(aux_data['batch_dist_mat_loss']),
                     loss_name='dist_mat_loss',
                 ))

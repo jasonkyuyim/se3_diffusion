@@ -6,7 +6,7 @@ While our work is tailored towards protein backbone generation, it is in princip
 > For those interested in non-protein applications, we have prepared a minimal notebook with SO(3) diffusion
 > https://colab.research.google.com/github/blt2114/SO3_diffusion_example/blob/main/SO3_diffusion_example.ipynb 
 
-We welcome pull requests (especially bugs) and contributions.
+We welcome pull requests (especially bug fixes) and contributions.
 We will try out best to improve readability and answer questions!
 
 If you use our work then please cite

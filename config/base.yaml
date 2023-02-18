@@ -110,3 +110,10 @@ experiment:
   noise_scale: 1.0
   # Filled in during training.
   num_parameters: null
+
+hydra:
+  sweeper:
+    params:
+      # Example of hydra multi run and wandb.
+      experiment.name: wandb
+      experiment.use_wandb: True

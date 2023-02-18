@@ -34,17 +34,11 @@ EVAL_METRICS = [
     'tm_score', 
 ]
 
-SEQUENCE_METRICS = [
-    'perplexity',
-    'sequence_similarity'
-]
-
 ALL_METRICS = (
     INTER_VIOLATION_METRICS
     + SHAPE_METRICS
     + CA_VIOLATION_METRICS
     + EVAL_METRICS
-    + SEQUENCE_METRICS
 )
 
 def calc_tm_score(pos_1, pos_2, seq_1, seq_2):

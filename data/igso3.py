@@ -125,7 +125,8 @@ class IGSO3:
         # Compute and cache if cache does not exist
         if recompute or sum([not os.path.exists(cache_fn) for cache_fn in cache_fns]) != 0:
             print('Computing and caching IGSO3.')
-            igso3_vals = calculate_igso3(num_ts=1000, num_omegas=1000, min_t=0.01, max_t=4, L=500)
+            igso3_vals = calculate_igso3(
+                num_ts=num_ts, num_omegas=num_omegas,min_t=min_t, max_t=max_t, L=L)
             np.save(cdf_cache, igso3_vals['cdf'])
             np.save(pdf_cache, igso3_vals['pdf'])
             np.save(pdf_angle_cache, igso3_vals['pdf_angle'])
