@@ -19,6 +19,8 @@ If you use our work then please cite
 }
 ```
 
+We also want to mention our colleagues who worked on SE(3) diffusion for protein-ligand docking: [DiffDock](https://github.com/gcorso/DiffDock).
+
 ![framediff-landing-page](https://github.com/jasonkyuyim/se3_diffusion/blob/master/media/denoising.gif)
 
 ## Installation
@@ -108,9 +110,13 @@ https://files.rcsb.org/pub/pdb/data/structures/divided/mmCIF/
 ..
 zz/
 ```
+In this directory, unzip all the files: 
+```
+gzip -d **/*.gz
+```
 Then run the following with <path_pdb_dir> replaced with the location of PDB.
 ```python
-python processed_pdb_dataset.py --mmcif_dir <pdb_dir> 
+python process_pdb_dataset.py --mmcif_dir <pdb_dir> 
 ```
 See the script for more options. Each mmCIF will be written as a pickle file that
 we read and process in the data loading pipeline. A `metadata.csv` will be saved

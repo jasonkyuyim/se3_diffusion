@@ -216,7 +216,7 @@ class Experiment:
         else:
             replica_id = 0
         if self._use_wandb and replica_id == 0:
-            self.init_wandb()
+                self.init_wandb()
 
         if torch.cuda.is_available() and self._exp_conf.use_gpu:
             gpu_id = self._available_gpus[replica_id]
@@ -478,7 +478,7 @@ class Experiment:
         trans_score_scaling = batch['trans_score_scaling']
         batch_loss_mask = torch.any(bb_mask, dim=-1)
 
-        pred_rot_score = model_out['rot_score'] * diffuse_mask[..., None, None]
+        pred_rot_score = model_out['rot_score'] * diffuse_mask[..., None]
         pred_trans_score = model_out['trans_score'] * diffuse_mask[..., None]
 
         # Translation score loss
@@ -504,10 +504,10 @@ class Experiment:
         trans_loss *= int(self._diff_conf.diffuse_trans)
 
         # Rotation loss
-        rot_mse = (gt_rot_score - pred_rot_score)**2 * loss_mask[..., None, None]
+        rot_mse = (gt_rot_score - pred_rot_score)**2 * loss_mask[..., None]
         rot_loss = torch.sum(
-            rot_mse / rot_score_scaling[:, None, None, None]**2,
-            dim=(-1, -2, -3)
+            rot_mse / rot_score_scaling[:, None, None]**2,
+            dim=(-1, -2)
         ) / (loss_mask.sum(dim=-1) + 1e-10)
         rot_loss *= self._exp_conf.rot_loss_weight
         rot_loss *= int(self._diff_conf.diffuse_rot)
