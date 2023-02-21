@@ -16,6 +16,7 @@ import time
 from tqdm import tqdm
 import numpy as np
 import mdtraj as md
+from Bio.PDB import MMCIFParser, PDBIO
 
 from data import mmcif_parsing
 from data import utils as du
@@ -193,13 +194,26 @@ def process_mmcif(
             f'Too long {complex_aatype.shape[0]}')
 
     try:
+        
+        # Workaround for MDtraj not supporting mmcif in their latest release.
+        # MDtraj source does support mmcif https://github.com/mdtraj/mdtraj/issues/652
+        # We temporarily save the mmcif as a pdb and delete it after running mdtraj.
+        p = MMCIFParser()
+        struc = p.get_structure("", mmcif_path)
+        io = PDBIO()
+        io.set_structure(struc)
+        pdb_path = mmcif_path.replace('.cif', '.pdb')
+        io.save(pdb_path)
+
         # MDtraj
-        traj = md.load(mmcif_path)
+        traj = md.load(pdb_path)
         # SS calculation
         pdb_ss = md.compute_dssp(traj, simplified=True)
         # DG calculation
         pdb_dg = md.compute_rg(traj)
+        os.remove(pdb_path)
     except Exception as e:
+        os.remove(pdb_path)
         raise errors.DataError(f'Mdtraj failed with error {e}')
 
     chain_dict['ss'] = pdb_ss[0]
