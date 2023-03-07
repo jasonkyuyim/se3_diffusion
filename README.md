@@ -21,6 +21,8 @@ If you use our work then please cite
 
 We also want to mention our colleagues who worked on SE(3) diffusion for protein-ligand docking: [DiffDock](https://github.com/gcorso/DiffDock).
 
+LICENSE: MIT
+
 ![framediff-landing-page](https://github.com/jasonkyuyim/se3_diffusion/blob/master/media/denoising.gif)
 
 ## Installation
@@ -122,6 +124,11 @@ See the script for more options. Each mmCIF will be written as a pickle file tha
 we read and process in the data loading pipeline. A `metadata.csv` will be saved
 that contains the pickle path of each example as well as additional information
 about each example for faster filtering.
+
+For PDB files, we provide some starter code in `process_pdb_files.py`  of how to
+modify `process_pdb_dataset.py` to work with PDB files (as we did at an earlier
+point in the project). **This has not been tested.** Please make a pull request
+if you create a PDB file processing script. 
 
 ### Launching training 
 `train_se3_diffusion.py` is the training script. It utilizes [Hydra](https://hydra.cc).
