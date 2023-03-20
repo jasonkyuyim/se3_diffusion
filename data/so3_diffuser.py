@@ -20,7 +20,8 @@ class SO3Diffuser:
 
         # Discretize omegas for calculating CDFs. Skip omega=0.
         self.igso3 = igso3.IGSO3(min_t=self.min_sigma**2, max_t=self.max_sigma**2,
-                L=2000, num_ts=self.num_sigma, num_omegas=so3_conf.num_omega, cache_dir=so3_conf.cache_dir)
+                L=2000, num_ts=self.num_sigma, num_omegas=so3_conf.num_omega,
+                cache_dir=so3_conf.cache_dir)
 
         self._score_scaling = np.sqrt(np.abs(
             np.sum(
@@ -59,8 +60,11 @@ class SO3Diffuser:
     def sample_ref(self, n_samples: float=1):
         return so3_utils.sample_uniform(n_samples)
 
-    def torch_score(self, R: torch.tensor, R_0: torch.tensor, t: torch.tensor, eps: float=1e-6):
+    def torch_score(self, R: torch.tensor, R_0: torch.tensor, t: torch.tensor,
+            eps: float=1e-6):
         """Computes the score of IGSO(3) density
+
+        grad_R log IGSO3(R ; R_0, t)
 
         Args:
             R: [..., 3, 3] array of rotation matrices at which to compute the score.
@@ -72,10 +76,10 @@ class SO3Diffuser:
             [..., 3, 3] score vector in the direction of the sampled vector with
             magnitude given by _score_norms.
         """
-        R_0t = torch.einsum('...ji,...jk->...ik', R_0, R)
+        R_0t = torch.einsum('...ji,...jk->...ik', R_0, R) # compute R_0^T R
         score = torch.einsum(
                 '...ij,...jk->...ik',
-                R_0, self.igso3.score(R_0t, t, eps).to(R_0.dtype))
+                R_0, self.igso3.score(R_0t, t, eps))
         return score
 
     def score_scaling(self, t: np.ndarray):
@@ -94,11 +98,12 @@ class SO3Diffuser:
             rot_score: [..., 3, 3] score of rot_t as a rotation vector.
         """
         n_samples = np.cumprod(R_0.shape[:-2])[-1]
-        R_0 = torch.tensor(R_0) # rotvec to matrix
+        R_0_ = torch.tensor(R_0) # rotvec to matrix
         sampled_rots = self.igso3.sample(t, n_samples=n_samples)
-        rot_score = self.torch_score(sampled_rots, t).reshape(R_0.shape)
+        R_t = torch.einsum('...ij,...jk->...ik', sampled_rots, R_0_)
+        rot_score = self.torch_score(R_t, R_0_, torch.tensor(t)).reshape(R_0_.shape)
         rot_score = rot_score.numpy().astype(R_0.dtype)
-        R_t = torch.einsum('...ij,...jk->...ik', sampled_rots, R_0)
+        R_t = R_t.numpy().astype(R_0.dtype)
         return R_t, rot_score
 
     def reverse(

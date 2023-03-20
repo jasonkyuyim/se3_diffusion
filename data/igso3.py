@@ -1,6 +1,8 @@
 from data import so3_utils
+from data import utils as du
 import os
 import torch
+
 import numpy as np
 
 def f_igso3(omega, t, L=500):
@@ -23,18 +25,39 @@ def f_igso3(omega, t, L=500):
         t: variance parameter of IGSO(3), maps onto time in Brownian motion
         L: Truncation level
     """
-
-    ls = torch.arange(L)  # of shape [1, L]
-    approx = ((2*ls + 1) * torch.exp(-ls*(ls+1)*t/2) *
-         torch.sin(omega.unsqueeze(-1)*(ls+1/2)) / torch.sin(omega.unsqueeze(-1)/2)).sum(dim=-1)
+    ls = torch.arange(L)[None]  # of shape [1, L]
+    if len(omega.shape)>1:
+        t = t.unsqueeze(-1).unsqueeze(-1)
+    omega = omega.unsqueeze(-1)
+    prefactor = (2*ls + 1) * torch.exp(-ls*(ls+1)*t/2)
+    numerator = torch.sin(omega*(ls+1/2))
+    denominator = torch.sin(omega/2)
+    approx = (prefactor*numerator/denominator).sum(dim=-1)
     return approx
 
+def d_f_igso3_d_omega(omega, t, L=500):
+    """d_f_igso3_d_omega is the derivative of f_igso3 with respect to omega
+    """
+    ls = torch.arange(L)[None]  # of shape [1, L]
+    if len(omega.shape)>1:
+        t = t.unsqueeze(-1).unsqueeze(-1)
+
+    omega = omega.unsqueeze(-1)
+    prefactor = (2*ls + 1) * torch.exp(-ls*(ls+1)*t/2)
+    numerator = torch.sin(omega*(ls+1/2))
+    d_numerator_dx = (ls+1/2)*torch.cos(omega*(ls+1/2))
+    denominator = torch.sin(omega/2)
+    d_denominator_dx = (1/2)*torch.cos(omega/2)
+    approx = (prefactor*(
+        (d_numerator_dx*denominator - numerator*d_denominator_dx)/denominator**2)
+    ).sum(dim=-1)
+    return approx
 
 def d_logf_d_omega(omega, t, L=500):
-    omega = torch.tensor(omega, requires_grad=True)
-    log_f = torch.log(f_igso3(omega, t, L))
-    out = torch.autograd.grad(log_f.sum(), omega)[0]
-    return out
+    f = f_igso3(omega, t, L)
+    d_f_dx = d_f_igso3_d_omega(omega, t, L)
+    # The approxmation below to the derivative at t<0.3 is very close to the true value
+    return torch.where(t[..., None]<0.3, -omega/t[...,None], d_f_dx / f)
 
 # IGSO3 density with respect to the volume form on SO(3)
 def igso3_density(Rt, t, L=500):
@@ -81,7 +104,7 @@ def calculate_igso3(*, num_ts=1000, num_omegas=1000, min_t=0.01, max_t=4, L=500)
     # Compute the norms of the scores.  This are used to scale the rotation axis when
     # computing the score as a vector.
     d_logf_d_omega_val = np.asarray(
-        [d_logf_d_omega(discrete_omegas, t).numpy() for t in discrete_ts])
+        [d_logf_d_omega(torch.tensor(discrete_omegas), torch.tensor(t)).numpy() for t in discrete_ts])
 
 
     return {
@@ -101,6 +124,7 @@ class IGSO3:
         self.max_t = max_t
         self.num_ts = num_ts
         self.num_omegas = num_omegas
+        self.L = L
 
         # Precompute and cache IGSO3 values.
         cache_dir = os.path.join(
@@ -123,7 +147,8 @@ class IGSO3:
         # Compute and cache if cache does not exist
         if recompute or sum([not os.path.exists(cache_fn) for cache_fn in cache_fns]) != 0:
             print('Computing and caching IGSO3.')
-            igso3_vals = calculate_igso3(num_ts=1000, num_omegas=1000, min_t=0.01, max_t=4, L=500)
+            igso3_vals = calculate_igso3(num_ts=num_ts, num_omegas=num_omegas,
+                    min_t=min_t, max_t=max_t, L=L)
             np.save(cdf_cache, igso3_vals['cdf'])
             np.save(pdf_cache, igso3_vals['pdf'])
             np.save(pdf_angle_cache, igso3_vals['pdf_angle'])
@@ -183,7 +208,7 @@ class IGSO3:
     def d_logf_d_omega(self, omega, t):
         return np.interp(omega, self._discrete_omegas, self._d_logf_d_omega[self.t_idx(t)])
 
-    def score(self, R: torch.tensor, t: float, eps: float=1e-6):
+    def score(self, R: torch.tensor, t: torch.tensor, eps: float=1e-6):
         """Computes the score of IGSO(3) density as a rotation vector.
 
         Same as score function but uses pytorch and performs a look-up.
@@ -197,13 +222,5 @@ class IGSO3:
             [..., 3, 3] score vector in the direction of the sampled vector with
             magnitude given by _d_logf_d_omega.
         """
-        omega = so3_utils.Omega(R)
-        d_logf_d_omega_by_omega = self._d_logf_d_omega[self.t_idx(float(t))]
-        d_logf_d_omega_by_omega = torch.tensor(d_logf_d_omega_by_omega).to(R.device)
-        omega_idx = torch.bucketize(omega, torch.tensor(self._discrete_omegas[:-1]).to(R.device))
-        d_logf_d_omega = d_logf_d_omega_by_omega[omega_idx]
-
-        # Unit vector in tangent space
-        direction = torch.einsum('...jk,...kl->...jl',
-                R, so3_utils.log(R)/(omega[..., None, None] + eps))
-        return direction * d_logf_d_omega[..., None, None]
+        score = igso3_score(R, t, L=self.L)
+        return score.reshape(R.shape)
