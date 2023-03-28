@@ -530,6 +530,7 @@ class Experiment:
         ) / (bb_atom_loss_mask.sum(dim=(-1, -2)) + 1e-10)
         bb_atom_loss *= self._exp_conf.bb_atom_loss_weight
         bb_atom_loss *= batch['t'] < self._exp_conf.bb_atom_loss_t_filter
+        bb_atom_loss *= self._exp_conf.aux_loss_weight
 
         # Pairwise distance loss
         gt_flat_atoms = gt_atom37.reshape([batch_size, num_res*5, 3])
@@ -558,10 +559,13 @@ class Experiment:
         dist_mat_loss /= (torch.sum(pair_dist_mask, dim=(1, 2)) - num_res)
         dist_mat_loss *= self._exp_conf.dist_mat_loss_weight
         dist_mat_loss *= batch['t'] < self._exp_conf.dist_mat_loss_t_filter
+        dist_mat_loss *= self._exp_conf.aux_loss_weight
 
         final_loss = (
-            rot_loss + trans_loss
-            + self._exp_conf.aux_loss_weight * (bb_atom_loss + dist_mat_loss)
+            rot_loss
+            + trans_loss
+            + bb_atom_loss
+            + dist_mat_loss
         )
 
         def normalize_loss(x):

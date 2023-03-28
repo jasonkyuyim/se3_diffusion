@@ -13,6 +13,32 @@ from openfold.data import data_transforms
 from openfold.np import residue_constants
 from openfold.utils import rigid_utils
 
+from sklearn.preprocessing import PolynomialFeatures
+from sklearn.linear_model import LinearRegression
+
+
+def _rog_quantile_curve(df, quantile, eval_x):
+    y_quant = pd.pivot_table(
+        df,
+        values='radius_gyration', 
+        index='modeled_seq_len',
+        aggfunc=lambda x: np.quantile(x, quantile)
+    )
+    x_quant = y_quant.index.to_numpy()
+    y_quant = y_quant.radius_gyration.to_numpy()
+
+    # Fit polynomial regressor
+    poly = PolynomialFeatures(degree=4, include_bias=True)
+    poly_features = poly.fit_transform(x_quant[:, None])
+    poly_reg_model = LinearRegression()
+    poly_reg_model.fit(poly_features, y_quant)
+
+    # Calculate cutoff for all sequence lengths
+    pred_poly_features = poly.fit_transform(eval_x[:, None])
+    # Add a little more.
+    pred_y = poly_reg_model.predict(pred_poly_features) + 0.1
+    return pred_y
+
 class PdbDataset(data.Dataset):
     def __init__(
             self,
@@ -62,6 +88,14 @@ class PdbDataset(data.Dataset):
         if filter_conf.min_beta_percent is not None:
             pdb_csv = pdb_csv[
                 pdb_csv.strand_percent > filter_conf.min_beta_percent]
+        if filter_conf.rog_quantile > 0.0:
+            prot_rog_low_pass = _rog_quantile_curve(
+                pdb_csv, 
+                filter_conf.rog_quantile,
+                np.arange(filter_conf.max_len))
+            row_rog_cutoffs = pdb_csv.modeled_seq_len.map(
+                lambda x: prot_rog_low_pass[x-1])
+            pdb_csv = pdb_csv[pdb_csv.radius_gyration < row_rog_cutoffs]
         if filter_conf.subset is not None:
             pdb_csv = pdb_csv[:filter_conf.subset]
         pdb_csv = pdb_csv.sort_values('modeled_seq_len', ascending=False)
@@ -122,8 +156,8 @@ class PdbDataset(data.Dataset):
         shuffled_chain_idx = np.array(
             random.sample(all_chain_idx, len(all_chain_idx))) - np.min(all_chain_idx) + 1
         for i,chain_id in enumerate(all_chain_idx):
-            chain_mask = (chain_idx == chain_id).astype(np.int)
-            chain_min_idx = np.min(res_idx + (1 - chain_mask) * 1e3).astype(np.int)
+            chain_mask = (chain_idx == chain_id).astype(int)
+            chain_min_idx = np.min(res_idx + (1 - chain_mask) * 1e3).astype(int)
             new_res_idx = new_res_idx + (res_idx - chain_min_idx + 1) * chain_mask
 
             # Shuffle chain_index

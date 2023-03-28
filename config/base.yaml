@@ -15,6 +15,7 @@ data:
     max_helix_percent: 1.0
     max_loop_percent: 0.5
     min_beta_percent: -1.0
+    rog_quantile: 0.96
   min_t: 0.01
   samples_per_eval_length: 4
   num_eval_lengths: 10
@@ -70,12 +71,12 @@ experiment:
 
   # Training arguments
   log_freq: 1000
-  batch_size: 256
+  batch_size: 128
   eval_batch_size: ${data.samples_per_eval_length}
   num_loader_workers: 10
   num_epoch: 95
   learning_rate: 0.0001
-  max_squared_res: 1000000
+  max_squared_res: 300000
   prefetch_factor: 100
   use_gpu: True
   num_gpus: 2
@@ -103,7 +104,7 @@ experiment:
   bb_atom_loss_t_filter: 0.25
   dist_mat_loss_weight: 1.0
   dist_mat_loss_t_filter: 0.25
-  aux_loss_weight: 25
+  aux_loss_weight: 0.25
 
   # Evaluation.
   eval_dir: ./eval_outputs
@@ -115,5 +116,5 @@ hydra:
   sweeper:
     params:
       # Example of hydra multi run and wandb.
-      experiment.name: wandb
+      experiment.name: use_wandb
       experiment.use_wandb: True

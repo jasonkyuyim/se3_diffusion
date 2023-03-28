@@ -116,7 +116,7 @@ class SE3Diffuser:
         return self._r3_diffuser.score(
             trans_t, trans_0, t, use_torch=use_torch, scale=scale)
 
-    def calc_rot_sore(self, rots_t, rots_0, t):
+    def calc_rot_score(self, rots_t, rots_0, t):
         rots_0_inv = rots_0.invert()
         quats_0_inv = rots_0_inv.get_quats()
         quats_t = rots_t.get_quats()

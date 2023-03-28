@@ -231,10 +231,10 @@ def make_atom14_positions(prot):
     restype_atom14_mask.append([0.0] * 14)
 
     restype_atom14_to_atom37 = np.array(
-        restype_atom14_to_atom37, dtype=np.int32
+        restype_atom14_to_atom37, dtype=int
     )
     restype_atom37_to_atom14 = np.array(
-        restype_atom37_to_atom14, dtype=np.int32
+        restype_atom37_to_atom14, dtype=int
     )
     restype_atom14_mask = np.array(restype_atom14_mask, dtype=np.float32)
 

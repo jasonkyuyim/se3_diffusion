@@ -171,22 +171,22 @@ def tied_featurize(batch, device, chain_dict, fixed_position_dict=None, omit_AA_
     """ Pack and pad batch into torch tensors """
     alphabet = 'ACDEFGHIKLMNPQRSTVWYX'
     B = len(batch)
-    lengths = np.array([len(b['seq']) for b in batch], dtype=np.int32) #sum of chain seq lengths
+    lengths = np.array([len(b['seq']) for b in batch], dtype=int) #sum of chain seq lengths
     L_max = max([len(b['seq']) for b in batch])
     if ca_only:
         X = np.zeros([B, L_max, 1, 3])
     else:
         X = np.zeros([B, L_max, 4, 3])
-    residue_idx = -100*np.ones([B, L_max], dtype=np.int32)
-    chain_M = np.zeros([B, L_max], dtype=np.int32) #1.0 for the bits that need to be predicted
+    residue_idx = -100*np.ones([B, L_max], dtype=int)
+    chain_M = np.zeros([B, L_max], dtype=int) #1.0 for the bits that need to be predicted
     pssm_coef_all = np.zeros([B, L_max], dtype=np.float32) #1.0 for the bits that need to be predicted
     pssm_bias_all = np.zeros([B, L_max, 21], dtype=np.float32) #1.0 for the bits that need to be predicted
     pssm_log_odds_all = 10000.0*np.ones([B, L_max, 21], dtype=np.float32) #1.0 for the bits that need to be predicted
-    chain_M_pos = np.zeros([B, L_max], dtype=np.int32) #1.0 for the bits that need to be predicted
+    chain_M_pos = np.zeros([B, L_max], dtype=int) #1.0 for the bits that need to be predicted
     bias_by_res_all = np.zeros([B, L_max, 21], dtype=np.float32)
-    chain_encoding_all = np.zeros([B, L_max], dtype=np.int32) #1.0 for the bits that need to be predicted
-    S = np.zeros([B, L_max], dtype=np.int32)
-    omit_AA_mask = np.zeros([B, L_max, len(alphabet)], dtype=np.int32)
+    chain_encoding_all = np.zeros([B, L_max], dtype=int) #1.0 for the bits that need to be predicted
+    S = np.zeros([B, L_max], dtype=int)
+    omit_AA_mask = np.zeros([B, L_max, len(alphabet)], dtype=int)
     # Build the batch
     letter_list_list = []
     visible_list_list = []
@@ -250,7 +250,7 @@ def tied_featurize(batch, device, chain_dict, fixed_position_dict=None, omit_AA_
                 c+=1
                 fixed_position_mask = np.ones(chain_length)
                 fixed_position_mask_list.append(fixed_position_mask)
-                omit_AA_mask_temp = np.zeros([chain_length, len(alphabet)], np.int32)
+                omit_AA_mask_temp = np.zeros([chain_length, len(alphabet)], int)
                 omit_AA_mask_list.append(omit_AA_mask_temp)
                 pssm_coef = np.zeros(chain_length)
                 pssm_bias = np.zeros([chain_length, 21])
@@ -289,7 +289,7 @@ def tied_featurize(batch, device, chain_dict, fixed_position_dict=None, omit_AA_
                     if fixed_pos_list:
                         fixed_position_mask[np.array(fixed_pos_list)-1] = 0.0
                 fixed_position_mask_list.append(fixed_position_mask)
-                omit_AA_mask_temp = np.zeros([chain_length, len(alphabet)], np.int32)
+                omit_AA_mask_temp = np.zeros([chain_length, len(alphabet)], int)
                 if omit_AA_dict!=None:
                     for item in omit_AA_dict[b['name']][letter]:
                         idx_AA = np.array(item[0])-1
@@ -375,7 +375,7 @@ def tied_featurize(batch, device, chain_dict, fixed_position_dict=None, omit_AA_
         bias_by_res_all[i,:] = bias_by_res_pad
 
         # Convert to labels
-        indices = np.asarray([alphabet.index(a) for a in all_sequence], dtype=np.int32)
+        indices = np.asarray([alphabet.index(a) for a in all_sequence], dtype=int)
         S[i, :l] = indices
         letter_list_list.append(letter_list)
         visible_list_list.append(visible_list)

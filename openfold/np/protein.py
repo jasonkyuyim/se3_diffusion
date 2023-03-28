@@ -308,7 +308,7 @@ def to_pdb(prot: Protein) -> str:
     atom_mask = prot.atom_mask
     aatype = prot.aatype
     atom_positions = prot.atom_positions
-    residue_index = prot.residue_index.astype(np.int32)
+    residue_index = prot.residue_index.astype(int)
     b_factors = prot.b_factors
     chain_index = prot.chain_index
 

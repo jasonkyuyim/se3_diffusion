@@ -75,12 +75,12 @@ def make_sequence_features(
         mapping=residue_constants.restype_order_with_x,
         map_unknown_to_x=True,
     )
-    features["between_segment_residues"] = np.zeros((num_res,), dtype=np.int32)
+    features["between_segment_residues"] = np.zeros((num_res,), dtype=int)
     features["domain_name"] = np.array(
         [description.encode("utf-8")], dtype=np.object_
     )
-    features["residue_index"] = np.array(range(num_res), dtype=np.int32)
-    features["seq_length"] = np.array([num_res] * num_res, dtype=np.int32)
+    features["residue_index"] = np.array(range(num_res), dtype=int)
+    features["seq_length"] = np.array([num_res] * num_res, dtype=int)
     features["sequence"] = np.array(
         [sequence.encode("utf-8")], dtype=np.object_
     )
@@ -208,10 +208,10 @@ def make_msa_features(
     num_res = len(msas[0][0])
     num_alignments = len(int_msa)
     features = {}
-    features["deletion_matrix_int"] = np.array(deletion_matrix, dtype=np.int32)
-    features["msa"] = np.array(int_msa, dtype=np.int32)
+    features["deletion_matrix_int"] = np.array(deletion_matrix, dtype=int)
+    features["msa"] = np.array(int_msa, dtype=int)
     features["num_alignments"] = np.array(
-        [num_alignments] * num_res, dtype=np.int32
+        [num_alignments] * num_res, dtype=int
     )
     return features
 

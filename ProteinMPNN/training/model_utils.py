@@ -19,14 +19,14 @@ import itertools
 def featurize(batch, device):
     alphabet = 'ACDEFGHIKLMNPQRSTVWYX'
     B = len(batch)
-    lengths = np.array([len(b['seq']) for b in batch], dtype=np.int32) #sum of chain seq lengths
+    lengths = np.array([len(b['seq']) for b in batch], dtype=int) #sum of chain seq lengths
     L_max = max([len(b['seq']) for b in batch])
     X = np.zeros([B, L_max, 4, 3])
-    residue_idx = -100*np.ones([B, L_max], dtype=np.int32) #residue idx with jumps across chains
-    chain_M = np.zeros([B, L_max], dtype=np.int32) #1.0 for the bits that need to be predicted, 0.0 for the bits that are given
-    mask_self = np.ones([B, L_max, L_max], dtype=np.int32) #for interface loss calculation - 0.0 for self interaction, 1.0 for other
-    chain_encoding_all = np.zeros([B, L_max], dtype=np.int32) #integer encoding for chains 0, 0, 0,...0, 1, 1,..., 1, 2, 2, 2...
-    S = np.zeros([B, L_max], dtype=np.int32) #sequence AAs integers
+    residue_idx = -100*np.ones([B, L_max], dtype=int) #residue idx with jumps across chains
+    chain_M = np.zeros([B, L_max], dtype=int) #1.0 for the bits that need to be predicted, 0.0 for the bits that are given
+    mask_self = np.ones([B, L_max, L_max], dtype=int) #for interface loss calculation - 0.0 for self interaction, 1.0 for other
+    chain_encoding_all = np.zeros([B, L_max], dtype=int) #integer encoding for chains 0, 0, 0,...0, 1, 1,..., 1, 2, 2, 2...
+    S = np.zeros([B, L_max], dtype=int) #sequence AAs integers
     init_alphabet = ['A', 'B', 'C', 'D', 'E', 'F', 'G','H', 'I', 'J','K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T','U', 'V','W','X', 'Y', 'Z', 'a', 'b', 'c', 'd', 'e', 'f', 'g','h', 'i', 'j','k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't','u', 'v','w','x', 'y', 'z']
     extra_alphabet = [str(item) for item in list(np.arange(300))]
     chain_letters = init_alphabet + extra_alphabet
@@ -107,7 +107,7 @@ def featurize(batch, device):
         chain_encoding_all[i,:] = chain_encoding_pad
 
         # Convert to labels
-        indices = np.asarray([alphabet.index(a) for a in all_sequence], dtype=np.int32)
+        indices = np.asarray([alphabet.index(a) for a in all_sequence], dtype=int)
         S[i, :l] = indices
 
     isnan = np.isnan(X)

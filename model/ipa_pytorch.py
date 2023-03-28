@@ -645,7 +645,7 @@ class IpaScore(nn.Module):
                 edge_embed = self.trunk[f'edge_transition_{b}'](
                     node_embed, edge_embed)
                 edge_embed *= edge_mask[..., None]
-        rot_score = self.diffuser.calc_rot_sore(
+        rot_score = self.diffuser.calc_rot_score(
             init_rigids.get_rots(),
             curr_rigids.get_rots(),
             input_feats['t']
@@ -660,8 +660,6 @@ class IpaScore(nn.Module):
             use_torch=True,
         )
         trans_score = trans_score * node_mask[..., None]
-        rot_score = init_rots.apply(rot_score)
-
         _, psi_pred = self.torsion_pred(node_embed)
         model_out = {
             'psi': psi_pred,

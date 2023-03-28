@@ -26,7 +26,7 @@ def create_full_prot(
     if b_factors is None:
         b_factors = np.zeros([n, 37])
     if aatype is None:
-        aatype = np.zeros(n, dtype=np.int)
+        aatype = np.zeros(n, dtype=int)
     return protein.Protein(
         atom_positions=atom37,
         atom_mask=atom37_mask,

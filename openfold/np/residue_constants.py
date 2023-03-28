@@ -910,7 +910,7 @@ def sequence_to_onehot(
             "without any gaps. Got: %s" % sorted(mapping.values())
         )
 
-    one_hot_arr = np.zeros((len(sequence), num_entries), dtype=np.int32)
+    one_hot_arr = np.zeros((len(sequence), num_entries), dtype=int)
 
     for aa_index, aa_type in enumerate(sequence):
         if map_unknown_to_x:
@@ -1037,7 +1037,7 @@ MAP_HHBLITS_AATYPE_TO_OUR_AATYPE = tuple(
 def _make_standard_atom_mask() -> np.ndarray:
     """Returns [num_res_types, num_atom_types] mask array."""
     # +1 to account for unknown (all 0s).
-    mask = np.zeros([restype_num + 1, atom_type_num], dtype=np.int32)
+    mask = np.zeros([restype_num + 1, atom_type_num], dtype=int)
     for restype, restype_letter in enumerate(restypes):
         restype_name = restype_1to3[restype_letter]
         atom_names = residue_atoms[restype_name]
@@ -1121,10 +1121,10 @@ def _make_rigid_transformation_4x4(ex, ey, translation):
 # and an array with (restype, atomtype, coord) for the atom positions
 # and compute affine transformation matrices (4,4) from one rigid group to the
 # previous group
-restype_atom37_to_rigid_group = np.zeros([21, 37], dtype=np.int)
+restype_atom37_to_rigid_group = np.zeros([21, 37], dtype=int)
 restype_atom37_mask = np.zeros([21, 37], dtype=np.float32)
 restype_atom37_rigid_group_positions = np.zeros([21, 37, 3], dtype=np.float32)
-restype_atom14_to_rigid_group = np.zeros([21, 14], dtype=np.int)
+restype_atom14_to_rigid_group = np.zeros([21, 14], dtype=int)
 restype_atom14_mask = np.zeros([21, 14], dtype=np.float32)
 restype_atom14_rigid_group_positions = np.zeros([21, 14, 3], dtype=np.float32)
 restype_rigid_group_default_frame = np.zeros([21, 8, 4, 4], dtype=np.float32)
@@ -1280,7 +1280,7 @@ def make_atom14_dists_bounds(
 
 restype_atom14_ambiguous_atoms = np.zeros((21, 14), dtype=np.float32)
 restype_atom14_ambiguous_atoms_swap_idx = np.tile(
-    np.arange(14, dtype=np.int), (21, 1)
+    np.arange(14, dtype=int), (21, 1)
 )
 
 
