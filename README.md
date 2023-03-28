@@ -6,6 +6,11 @@ While our work is tailored towards protein backbone generation, it is in princip
 > For those interested in non-protein applications, we have prepared a minimal notebook with SO(3) diffusion
 > https://colab.research.google.com/github/blt2114/SO3_diffusion_example/blob/main/SO3_diffusion_example.ipynb 
 
+We have codebase updates we plan to get around to.
+
+* [In the works] Refactor score framework to be more readable and match the paper's math. See the [refactor branch](https://github.com/jasonkyuyim/se3_diffusion/tree/unsupported_refactor).
+* Set-up easily downloadable training data.
+
 We welcome pull requests (especially bug fixes) and contributions.
 We will try out best to improve readability and answer questions!
 
@@ -19,7 +24,11 @@ If you use our work then please cite
 }
 ```
 
-We also want to mention our colleagues who worked on SE(3) diffusion for protein-ligand docking: [DiffDock](https://github.com/gcorso/DiffDock).
+
+Other protein diffusion codebases:
+* Protein-ligand docking: [DiffDock](https://github.com/gcorso/DiffDock)
+* Protein torsion angles: [FoldingDiff](https://github.com/microsoft/foldingdiff/)
+* Protein C-alpha backbone generation: [ProtDiff/SMCDiff](https://github.com/blt2114/ProtDiff_SMCDiff)
 
 LICENSE: MIT
 
