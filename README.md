@@ -224,4 +224,5 @@ Once you have a good run, you can copy and save the weights somewhere for infere
 
 Thank you to the following for pointing out bugs:
 * longlongman
+* amorehead
 

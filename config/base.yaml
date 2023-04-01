@@ -9,7 +9,7 @@ data:
   filtering:
     max_len: 512
     min_len: 60
-    # Selects a subset fo examples. Useful for debugging.
+    # Selects a subset of examples. Useful for debugging.
     subset: null
     allowed_oligomer: [monomeric]
     max_helix_percent: 1.0

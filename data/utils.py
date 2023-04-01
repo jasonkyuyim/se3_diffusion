@@ -197,9 +197,9 @@ def matrix_to_rotvec(mat):
 def rotvec_to_quat(rotvec):
     return Rotation.from_rotvec(rotvec).as_quat()
 
-def pad_feats(raw_feats, max_len, torch=False):
+def pad_feats(raw_feats, max_len, use_torch=False):
     padded_feats = {
-        feat_name: pad(feat, max_len, torch=torch)
+        feat_name: pad(feat, max_len, use_torch=use_torch)
         for feat_name, feat in raw_feats.items()
         if feat_name not in UNPADDED_FEATS + RIGID_FEATS
     }
@@ -218,16 +218,17 @@ def pad_rigid(rigid: torch.tensor, max_len: int):
     num_rigids = rigid.shape[0]
     pad_amt = max_len - num_rigids
     pad_rigid = rigid_utils.Rigid.identity(
-        [pad_amt], dtype=rigid.dtype, device=rigid.device, requires_grad=False)
+        (pad_amt,), dtype=rigid.dtype, device=rigid.device, requires_grad=False)
     return torch.cat([rigid, pad_rigid.to_tensor_7()], dim=0)
 
-def pad(x: np.ndarray, max_len: int, pad_idx=0, torch=False, reverse=False):
+def pad(x: np.ndarray, max_len: int, pad_idx=0, use_torch=False, reverse=False):
     """Right pads dimension of numpy array.
 
     Args:
         x: numpy like array to pad.
         max_len: desired length after padding
         pad_idx: dimension to pad.
+        use_torch: use torch padding method instead of numpy.
 
     Returns:
         x with its pad_idx dimension padded to max_len
@@ -242,7 +243,7 @@ def pad(x: np.ndarray, max_len: int, pad_idx=0, torch=False, reverse=False):
         pad_widths[pad_idx] = (pad_amt, 0)
     else:
         pad_widths[pad_idx] = (0, pad_amt)
-    if torch:
+    if use_torch:
         return torch.pad(x, pad_widths)
     return np.pad(x, pad_widths)
 

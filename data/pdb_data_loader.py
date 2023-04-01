@@ -168,7 +168,7 @@ class PdbDataset(data.Dataset):
         final_feats = {
             'aatype': chain_feats['aatype'],
             'seq_idx': new_res_idx,
-            'chain_idx': chain_idx,
+            'chain_idx': new_chain_idx,
             'residx_atom14_to_atom37': chain_feats['residx_atom14_to_atom37'],
             'residue_index': processed_feats['residue_index'],
             'res_mask': processed_feats['bb_mask'],

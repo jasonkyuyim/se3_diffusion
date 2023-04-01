@@ -52,13 +52,12 @@ def process_chain(design_pdb_feats):
 
 
 def create_pad_feats(pad_amt):
-    pad_feats = {        
+    return {        
         'res_mask': torch.ones(pad_amt),
         'fixed_mask': torch.zeros(pad_amt),
         'rigids_impute': torch.zeros((pad_amt, 4, 4)),
         'torsion_impute': torch.zeros((pad_amt, 7, 2)),
     }
-    return pad_feats
 
 
 class Sampler:
