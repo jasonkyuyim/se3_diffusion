@@ -1,5 +1,6 @@
 # SE(3) diffusion model with application to protein backbone generation
 
+## Description
 Implementation for "SE(3) diffusion model with application to protein backbone generation" [arxiv link](https://arxiv.org/abs/2302.02277).
 While our work is tailored towards protein backbone generation, it is in principle applicable to other domains where SE(3) is utilized.
 
@@ -26,6 +27,7 @@ If you use our work then please cite
 
 
 Other protein diffusion codebases:
+* Pretrained protein backbone diffusion: [RFdiffusion](https://github.com/RosettaCommons/RFdiffusion)
 * Protein-ligand docking: [DiffDock](https://github.com/gcorso/DiffDock)
 * Protein torsion angles: [FoldingDiff](https://github.com/microsoft/foldingdiff/)
 * Protein C-alpha backbone generation: [ProtDiff/SMCDiff](https://github.com/blt2114/ProtDiff_SMCDiff)
@@ -34,7 +36,21 @@ LICENSE: MIT
 
 ![framediff-landing-page](https://github.com/jasonkyuyim/se3_diffusion/blob/master/media/denoising.gif)
 
-## Installation
+# Table of Contents
+- [SE(3) diffusion model with application to protein backbone generation](#se3-diffusion-model-with-application-to-protein-backbone-generation)
+  - [Description](#description)
+- [Table of Contents](#table-of-contents)
+- [Installation](#installation)
+    - [Third party source code](#third-party-source-code)
+- [Inference](#inference)
+- [Training](#training)
+    - [Downloading the PDB for training](#downloading-the-pdb-for-training)
+    - [Launching training](#launching-training)
+    - [Intermittent evaluation](#intermittent-evaluation)
+- [Acknowledgements](#acknowledgements)
+
+
+# Installation
 
 We recommend [miniconda](https://docs.conda.io/en/main/miniconda.html) (or anaconda).
 Run the following to install a conda environment with the necessary dependencies.
@@ -56,7 +72,7 @@ We use copied and adapted several files from the [AlphaFold](https://github.com/
 For a differentiable pytorch implementation of the Logarithmic map on SO(3) we adapted two functions form [geomstats](https://github.com/geomstats/geomstats).
 Go give these repos a star if you use this codebase!
 
-## Inference
+# Inference
 
 `inference_se3_diffusion.py` is the inference script. It utilizes [Hydra](https://hydra.cc).
 Training can be done with the following.
@@ -102,7 +118,7 @@ inference_outputs
         └── sample_1                    # Next sample
 ```
 
-## Training
+# Training
 
 ### Downloading the PDB for training
 To get the training dataset, first download PDB then preprocess it with our provided scripts.
@@ -203,3 +219,9 @@ The terminal will print the paths to which the checkpoint and samples are saved.
 ```
 This can also be found in the config in Wandb by searching `ckpt_dir`.
 Once you have a good run, you can copy and save the weights somewhere for inference.
+
+# Acknowledgements
+
+Thank you to the following for pointing out bugs:
+* longlongman
+
