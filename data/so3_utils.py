@@ -16,7 +16,7 @@ def hat(v):
 
 # vee map from Lie algebra so(3) to the vector space R^3
 def vee(A):
-    if not torch.allclose(A, -A.transpose(-1, -2), atol=1e-4, rtol=1e-4):
+    if not torch.allclose(A, -A.transpose(-1, -2), atol=1e-2, rtol=1e-2):
         print("Input A must be skew symmetric, Err" + str(((A - A.transpose(-1,
             -2))**2).sum(dim=[-1, -2])))
     vee_A = torch.stack([-A[..., 1, 2], A[..., 0, 2], -A[..., 0, 1]], dim=-1)
@@ -38,22 +38,30 @@ def exp(A): return torch.matrix_exp(A)
 # Exponential map from R^3 to SO(3)
 def Exp(A): return exp(hat(A))
 
+# Exponential map from R^3 to SO(3), I + (sin(theta)/theta)hat(A) + ((1-cos(theta))/theta^2)hat(A)^2
+def Exp2(A, eps=1e-4):
+    theta = (torch.norm(A, dim=-1, keepdim=True)[..., None] + eps)/(torch.pi + eps)
+    hat_A = hat(A)
+    hat_A_2 = torch.einsum('...ij,...jk->...ik', hat_A, hat_A)
+    return torch.eye(3, dtype=A.dtype, device=A.device) + (torch.sin(theta)/theta)*hat_A + ((1-torch.cos(theta))/theta**2)*hat_A_2
+
 # Angle of rotation SO(3) to R^+, this is the norm in our chosen orthonormal basis
-def Omega(R, eps=1e-5):
+def Omega(R, eps=1e-6):
     # multiplying by (1-epsilon) prevents instability of arccos when provided with -1 or 1 as input.
     R_ = R.to(torch.float64)
     assert not torch.any(torch.abs(R) > 1.1)
     trace = torch.diagonal(R_, dim1=-2, dim2=-1).sum(dim=-1) * (1-eps)
     out = (trace - 1.)/2.
-    out = torch.clamp(out, min=-0.999, max=0.999)
+    out = torch.clamp(out, min=-0.99, max=0.99)
     return torch.arccos(out).to(R.dtype)
 
 # exponential map from tangent space at R0 to SO(3)
 def expmap(R0, tangent):
     skew_sym = torch.einsum('...ij,...ik->...jk', R0, tangent)
-    if not  torch.allclose(skew_sym, -skew_sym.transpose(-1, -2), atol=1e-3,
-            rtol=1e-3):
+    if not torch.allclose(skew_sym, -skew_sym.transpose(-1, -2), atol=1e-2,
+            rtol=1e-2):
         print("in expmap, R0.T @ tangent must be skew symmetric")
+        import ipdb; ipdb.set_trace()
     skew_sym = (skew_sym - torch.transpose(skew_sym, -2, -1))/2.
     exp_skew_sym = exp(skew_sym)
     return torch.einsum('...ij,...jk->...ik', R0, exp_skew_sym)
@@ -188,3 +196,4 @@ def regularize(point):
     # reverse sign if angle was greater than pi
     norm_ratio = torch.where(angle > torch_pi, -norm_ratio, norm_ratio)
     return torch.einsum("...,...i->...i", norm_ratio, point)
+

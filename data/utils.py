@@ -596,3 +596,30 @@ def save_fasta(
     with open(file_path, 'w') as f:
         for x,y in zip(seq_names, pred_seqs):
             f.write(f'>{x}\n{y}\n')
+
+def update_via_matrix(R, q, update_mask=None, eps=1e-6):
+    if update_mask is None: update_mask = torch.ones_like(q[..., 0])
+
+    # Compute rotation vector
+    if False:
+        rot_vec  = (torch.pi/ 1.5) * (q/(torch.norm(q, dim=-1,
+            keepdim=True) + 1.))
+    else:
+        # Compute normalized quaternion
+        q_normalized = torch.ones(q.shape[:-1] + (4,)).to(q.device).to(q.dtype)
+        q_normalized[..., 1:] = q*update_mask
+        q_normalized = q_normalized / torch.norm(q_normalized, dim=-1, keepdim=True)
+
+        rot_vec = quat_to_rotvec(q_normalized)
+
+    delta_R = so3_utils.Exp(rot_vec)
+    return torch.matmul(R, delta_R)
+
+def rot_and_trans_rigid_update(
+    R:torch.tensor, t:torch.tensor,
+    q_update_vec:torch.tensor, update_mask:torch.Tensor=None):
+    q_vec, t_vec = q_update_vec[..., :3], q_update_vec[..., 3:]
+
+    R_update = update_via_matrix(R, q_vec, update_mask)
+    trans_update = t + torch.einsum('...ij,...j->...i', R, t_vec)
+    return R_update, trans_update

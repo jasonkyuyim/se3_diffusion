@@ -98,7 +98,7 @@ class SO3Diffuser:
             rot_score: [..., 3, 3] score of rot_t as a rotation vector.
         """
         n_samples = np.cumprod(R_0.shape[:-2])[-1]
-        R_0_ = torch.tensor(R_0) # rotvec to matrix
+        R_0_ = torch.tensor(R_0, dtype=torch.float64) # rotvec to matrix
         sampled_rots = self.igso3.sample(t, n_samples=n_samples)
         R_t = torch.einsum('...ij,...jk->...ik', sampled_rots, R_0_)
         rot_score = self.torch_score(R_t, R_0_, torch.tensor(t)).reshape(R_0_.shape)

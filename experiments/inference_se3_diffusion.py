@@ -28,6 +28,7 @@ from typing import Dict
 from experiments import train_se3_diffusion
 from omegaconf import DictConfig, OmegaConf
 from openfold.data import data_transforms
+from openfold.utils.rigid_utils import Rigid, Rotation
 import esm
 
 
@@ -52,7 +53,7 @@ def process_chain(design_pdb_feats):
 
 
 def create_pad_feats(pad_amt):
-    pad_feats = {        
+    pad_feats = {
         'res_mask': torch.ones(pad_amt),
         'fixed_mask': torch.zeros(pad_amt),
         'rigids_impute': torch.zeros((pad_amt, 4, 4)),
@@ -194,7 +195,7 @@ class Sampler:
     def run_sampling(self):
         """Sets up inference run.
 
-        All outputs are written to 
+        All outputs are written to
             {output_dir}/{date_time}
         where {output_dir} is created at initialization.
         """
@@ -299,7 +300,7 @@ class Sampler:
             reference_pdb_path: str,
             motif_mask: Optional[np.ndarray]=None):
         """Run self-consistency on design proteins against reference protein.
-        
+
         Args:
             decoy_pdb_dir: directory where designed protein files are stored.
             reference_pdb_path: path to reference protein file
@@ -443,6 +444,12 @@ class Sampler:
             'sc_ca_t': np.zeros((sample_length, 3)),
             **ref_sample,
         }
+
+        # add rotation and translation features
+        rigid_t = Rigid.from_tensor_7(init_feats['rigids_t'])
+        init_feats['R_t'] = rigid_t.get_rots().get_rot_mats().to(torch.float64)
+        init_feats['trans_t'] = rigid_t.get_trans().to(torch.float64)
+
         # Add batch dimension and move to GPU.
         init_feats = tree.map_structure(
             lambda x: x if torch.is_tensor(x) else torch.tensor(x), init_feats)
@@ -453,7 +460,7 @@ class Sampler:
         sample_out = self.exp.inference_fn(
             init_feats,
             num_t=self._diff_conf.num_t,
-            min_t=self._diff_conf.min_t, 
+            min_t=self._diff_conf.min_t,
             aux_traj=True,
             noise_scale=self._diff_conf.noise_scale,
         )

@@ -14,6 +14,7 @@ To modify config options with the command line,
 
 """
 import os
+import gc
 import torch
 import GPUtil
 import time
@@ -260,7 +261,25 @@ class Experiment:
         """Updates the state using some data and returns metrics."""
         self._optimizer.zero_grad()
         loss, aux_data = self.loss_fn(data)
+
+
         loss.backward()
+
+        # Print out the norm of the gradients
+        if True:
+            norm_sum = 0.
+            for name, param in self._model.named_parameters():
+                # Check if the parameter requires a gradient, and that it is not None
+                if param.requires_grad and param.grad is not None:
+                    #self._log.info(f'Gradient norm of {name}: {param.grad.norm()}')
+                    norm_sum += param.grad.norm()
+
+                # If gradient has nans, print out the name of the parameter and set the gradient to 0
+                if param.grad is not None and torch.isnan(param.grad).any():
+                    self._log.info(f'Gradient of {name} has nans')
+                    param.grad = torch.zeros_like(param.grad)
+            self._log.info(f'Gradient norm sum: {norm_sum}')
+
         self._optimizer.step()
         return loss, aux_data
 
@@ -296,7 +315,7 @@ class Experiment:
             # Take checkpoint
             if self._exp_conf.ckpt_dir is not None and (
                     (self.trained_steps % self._exp_conf.ckpt_freq) == 0
-                    or (self._exp_conf.early_ckpt and self.trained_steps == 100)
+                    or (self._exp_conf.early_ckpt and self.trained_steps == 10)
                 ):
                 ckpt_path = os.path.join(
                     self._exp_conf.ckpt_dir, f'step_{self.trained_steps}.pth')
@@ -398,6 +417,8 @@ class Experiment:
                         text=f"Loss NaN after {self.trained_epochs} epochs, {self.trained_steps} steps"
                     )
                 raise Exception(f'NaN encountered')
+            gc.collect()
+            torch.cuda.empty_cache()
 
         if return_logs:
             return global_logs
@@ -412,6 +433,9 @@ class Experiment:
             batch_size = res_mask.shape[0]
             valid_feats = tree.map_structure(
                 lambda x: x.to(device), valid_feats)
+            rigids_t = ru.Rigid.from_tensor_7(valid_feats['rigids_t'])
+            valid_feats['R_t'] = rigids_t.get_rots().get_rot_mats().to(torch.float64)
+            valid_feats['trans_t'] = rigids_t.get_trans().to(torch.float64)
 
             # Run inference
             infer_out = self.inference_fn(
@@ -579,6 +603,8 @@ class Experiment:
             + self._exp_conf.aux_loss_weight * (bb_atom_loss + dist_mat_loss)
         )
 
+
+
         def normalize_loss(x):
             return x.sum() /  (batch_loss_mask.sum() + 1e-10)
 
@@ -596,6 +622,17 @@ class Experiment:
             'examples_per_step': torch.tensor(batch_size),
             'res_length': torch.mean(torch.sum(bb_mask, dim=-1)),
         }
+
+        if False:
+            print("losses: ", final_loss)
+            #for k, v in aux_data.items():
+            #    print(f"\t{k}, {v}")
+
+        # If any of the losses in aux_data are NaN, then we should stop and open the debugger.
+        for k, v in aux_data.items():
+            if torch.isnan(v).any():
+                print(f"NaN detected in {k}")
+                import ipdb; ipdb.set_trace()
 
         # Maintain a history of the past N number of steps.
         # Helpful for debugging.
@@ -696,6 +733,8 @@ class Experiment:
                     model_out = self.model(sample_feats)
                     rigids_t = ru.Rigid.from_tensor_7(model_out['rigids'])
                 sample_feats['rigids_t'] = rigids_t.to_tensor_7().to(device)
+                sample_feats['R_t'] = rigids_t.get_rots().get_rot_mats().to(device).to(torch.float64)
+                sample_feats['trans_t'] = rigids_t.get_trans().to(device).to(torch.float64)
                 if aux_traj:
                     all_rigids.append(du.move_to_np(rigids_t.to_tensor_7()))
 

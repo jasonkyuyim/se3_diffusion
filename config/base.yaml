@@ -7,7 +7,7 @@ data:
   # CSV for path and metadata to training examples.
   csv_path: ./data/processed_pdb/metadata.csv
   filtering:
-    max_len: 512
+    max_len: 128
     min_len: 60
     # Selects a subset fo examples. Useful for debugging.
     subset: null
@@ -69,8 +69,8 @@ experiment:
   run_id: null
 
   # Training arguments
-  log_freq: 1000
-  batch_size: 256
+  log_freq: 100
+  batch_size: 128
   eval_batch_size: ${data.samples_per_eval_length}
   num_loader_workers: 10
   num_epoch: 50
@@ -86,12 +86,12 @@ experiment:
   # How many steps to checkpoint between.
   ckpt_freq: 10000
   # Take early checkpoint at step 100. Helpful for catching eval bugs early.
-  early_ckpt: True
+  early_ckpt: False
 
   # Checkpoint directory to warm start from.
   warm_start: null
   use_warm_start_conf: False
-  multi_gpu_size: 2
+  multi_gpu_size: 4
   prefetch_factor: 100
 
   # Loss weights.
@@ -103,7 +103,7 @@ experiment:
   bb_atom_loss_t_filter: 0.25
   dist_mat_loss_weight: 1.0
   dist_mat_loss_t_filter: 0.25
-  aux_loss_weight: 25
+  aux_loss_weight: 0.
 
   # Evaluation.
   eval_dir: ./eval_outputs

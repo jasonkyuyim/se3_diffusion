@@ -6,8 +6,9 @@ import math
 from scipy.stats import truncnorm
 import torch.nn as nn
 from typing import Optional, Callable, List, Sequence
-from openfold.utils.rigid_utils import Rigid
+from openfold.utils.rigid_utils import Rigid, Rotation
 from data import all_atom
+from data import utils as du
 
 
 def permute_final_dims(tensor: torch.Tensor, inds: List[int]):
@@ -610,22 +611,32 @@ class IpaScore(nn.Module):
         node_mask = input_feats['res_mask'].type(torch.float32)
         diffuse_mask = (1 - input_feats['fixed_mask'].type(torch.float32)) * node_mask
         edge_mask = node_mask[..., None] * node_mask[..., None, :]
-        init_frames = input_feats['rigids_t'].type(torch.float32)
 
-        curr_rigids = Rigid.from_tensor_7(torch.clone(init_frames))
-        init_rigids = Rigid.from_tensor_7(init_frames)
-        init_rots = init_rigids.get_rots()
+        init_R, init_trans = input_feats['R_t'], input_feats['trans_t']
+        # Confirm that types are float64
+        init_R = init_R.type(torch.float64)
+        if torch.any(init_trans.isnan()):
+            print("init trans is somewhere nan")
+            import ipdb; ipdb.set_trace()
+        if torch.any(init_R.isnan()): print("init rots is somewhere nan")
+
+        init_trans = init_trans.type(torch.float64)
+        curr_R, curr_trans = torch.clone(init_R), torch.clone(init_trans)
 
         # Main trunk
-        curr_rigids = self.scale_rigids(curr_rigids)
+        curr_trans = self.scale_pos(curr_trans)
         init_node_embed = init_node_embed * node_mask[..., None]
         node_embed = init_node_embed * node_mask[..., None]
         for b in range(self._ipa_conf.num_blocks):
             ipa_embed = self.trunk[f'ipa_{b}'](
                 node_embed,
                 edge_embed,
-                curr_rigids,
+                Rigid(rots=Rotation(rot_mats=curr_R), trans=curr_trans),
                 node_mask)
+            if torch.any(ipa_embed.isnan()):
+                print("ipa embed is somewhere nan")
+                import ipdb; ipdb.set_trace()
+
             ipa_embed *= node_mask[..., None]
             node_embed = self.trunk[f'ipa_ln_{b}'](node_embed + ipa_embed)
             seq_tfmr_in = torch.cat([
@@ -638,8 +649,14 @@ class IpaScore(nn.Module):
             node_embed = node_embed * node_mask[..., None]
             rigid_update = self.trunk[f'bb_update_{b}'](
                 node_embed * diffuse_mask[..., None])
-            curr_rigids = curr_rigids.compose_q_update_vec(
-                rigid_update, diffuse_mask[..., None])
+            curr_R, curr_trans = du.rot_and_trans_rigid_update(
+                curr_R, curr_trans,
+                rigid_update.to(curr_R.dtype),
+                diffuse_mask[..., None].to(curr_R.dtype))
+
+            if torch.any(curr_R.isnan()):
+                print("curr rots is somewhere nan in block", b)
+                import ipdb; ipdb.set_trace()
 
             if b < self._ipa_conf.num_blocks-1:
                 edge_embed = self.trunk[f'edge_transition_{b}'](
@@ -648,27 +665,33 @@ class IpaScore(nn.Module):
 
         # Compute score approximation as the conditional score (using IGSO3
         # transition kernel)
-        rot_score = self.diffuser.calc_rot_score(
-            init_rigids.get_rots(),
-            curr_rigids.get_rots(),
-            input_feats['t']
-        ).to(init_rigids.device)
+        rot_score = self.diffuser.calc_rot_score(init_R, curr_R, input_feats['t']).to(init_R.device)
+        if torch.any(rot_score.isnan()): print("rot score is somewhere nan")
         rot_score = rot_score * node_mask[..., None, None]
 
-        curr_rigids = self.unscale_rigids(curr_rigids)
+        curr_trans = self.unscale_pos(curr_trans)
         trans_score = self.diffuser.calc_trans_score(
-            init_rigids.get_trans(),
-            curr_rigids.get_trans(),
+            init_trans,
+            curr_trans,
             input_feats['t'][:, None, None],
             use_torch=True,
         )
         trans_score = trans_score * node_mask[..., None]
 
         _, psi_pred = self.torsion_pred(node_embed)
+
         model_out = {
             'psi': psi_pred,
             'rot_score': rot_score,
             'trans_score': trans_score,
-            'final_rigids': curr_rigids,
         }
+        model_out['R_final'] =  curr_R
+        model_out['trans_final'] =  curr_trans
+
+
+        # Save final rigids
+        model_out['final_rigids'] = Rigid(
+                rots=Rotation(rot_mats=curr_R), trans=curr_trans)
+
+
         return model_out

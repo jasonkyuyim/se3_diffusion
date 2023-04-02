@@ -9,12 +9,25 @@ import torch
 import logging
 
 def _extract_trans_rots(rigid: ru.Rigid):
-    rot = rigid.get_rots().get_rot_mats().cpu().numpy()
-    tran = rigid.get_trans().cpu().numpy()
+    rot = rigid.get_rots().get_rot_mats().cpu().to(torch.float64).numpy()
+    tran = rigid.get_trans().cpu().to(torch.float64).numpy()
     return tran, rot
 
 def _assemble_rigid(R, trans):
-    return ru.Rigid(rots=ru.Rotation(rot_mats=torch.tensor(R)), trans=torch.tensor(trans))
+    # if trans is a torch.tensor, move to cpu and make float32
+
+    # check if type of R is torch.tensor
+    if isinstance(R, torch.Tensor):
+        R = R.cpu()
+    else:
+        R = torch.tensor(R).cpu()
+
+    # check if type of trans is torch.tensor
+    if isinstance(trans, torch.Tensor):
+        trans = trans.cpu()
+    else:
+        trans = torch.tensor(trans).cpu()
+    return ru.Rigid(rots=ru.Rotation(rot_mats=R), trans=trans)
 
 class SE3Diffuser:
 
@@ -90,6 +103,8 @@ class SE3Diffuser:
         if as_tensor_7:
             rigids_t = rigids_t.to_tensor_7()
         return {
+            'R_t': torch.tensor(R_t, dtype=torch.float64),
+            'trans_t': torch.tensor(trans_t, dtype=torch.float64),
             'rigids_t': rigids_t,
             'trans_score': trans_score,
             'rot_score': rot_score,
@@ -105,8 +120,9 @@ class SE3Diffuser:
             trans_t, trans_0, t, use_torch=use_torch, scale=scale)
 
     def calc_rot_score(self, R_t, R_0, t):
-        return self._so3_diffuser.torch_score(R_t.get_rot_mats().cpu(),
-                R_0.get_rot_mats().cpu(), t.cpu())
+        """Returns conditional score as object in tangent space at R_t"""
+        return self._so3_diffuser.torch_score(R_t.cpu(),
+                R_0.cpu(), t.cpu())
 
     def _apply_mask(self, x_diff, x_fixed, diff_mask):
         return diff_mask * x_diff + (1 - diff_mask) * x_fixed
@@ -174,7 +190,7 @@ class SE3Diffuser:
         if diffuse_mask is not None:
             trans_t_1 = self._apply_mask(
                 trans_t_1, trans_t, diffuse_mask[..., None])
-            rot_t_1 = self._apply_mask(
+            R_t_1 = self._apply_mask(
                 R_t_1, R_t, diffuse_mask[..., None, None])
 
         return _assemble_rigid(R_t_1, trans_t_1)
@@ -197,7 +213,7 @@ class SE3Diffuser:
             assert impute.shape[0] == n_samples
             trans_impute, rot_impute = _extract_trans_rots(impute)
             trans_impute = trans_impute.reshape((n_samples, 3))
-            rot_impute = rot_impute.reshape((n_samples, 3))
+            rot_impute = rot_impute.reshape((n_samples, 3, 3))
             trans_impute = self._r3_diffuser._scale(trans_impute)
 
         if diffuse_mask is not None and impute is None:
