@@ -29,9 +29,9 @@ inference:
     # Number of ESMFdold samples per backbone sample.
     seq_per_sample: 8
     # Minimum sequence length to sample.
-    min_length: 100
+    min_length: 60
     # Maximum sequence length to sample.
-    max_length: 500
+    max_length: 70
     # gap between lengths to sample. i.e. this script will sample all lengths
     # in range(min_length, max_length, length_step)
     length_step: 5

@@ -5,9 +5,9 @@ defaults:
 
 data:
   # CSV for path and metadata to training examples.
-  csv_path: ./data/processed_pdb/metadata.csv
+  csv_path: ./data/processed_pdb/metadata_top7.csv
   filtering:
-    max_len: 256
+    max_len: 512
     min_len: 60
     # Selects a subset fo examples. Useful for debugging.
     subset: null
@@ -40,8 +40,8 @@ diffuser:
     cache_dir: .cache/
 
 model:
-  node_embed_size: 256
-  edge_embed_size: 128
+  node_embed_size: 64
+  edge_embed_size: 32
   dropout: 0.0
   embed:
     index_embed_size: 32
@@ -53,14 +53,14 @@ model:
   ipa:
     c_s: ${model.node_embed_size}
     c_z: ${model.edge_embed_size}
-    c_hidden: 256
+    c_hidden: 64
     c_skip: 64
     no_heads: 8
     no_qk_points: 8
     no_v_points: 12
     seq_tfmr_num_heads: 4
     seq_tfmr_num_layers: 2
-    num_blocks: 4
+    num_blocks: 8
     coordinate_scaling: ${diffuser.r3.coordinate_scaling}
 
 experiment:
@@ -69,14 +69,14 @@ experiment:
   run_id: null
 
   # Training arguments
-  log_freq: 100
-  batch_size: 128
+  log_freq: 25
+  batch_size: 32
   eval_batch_size: ${data.samples_per_eval_length}
-  num_loader_workers: 10
-  num_epoch: 50
-  learning_rate: 0.0001
-  ckpt_dir: ./ckpt/
+  num_loader_workers: 6
+  num_epoch: 5000000
+  learning_rate: 0.001
   max_squared_res: 1000000
+  prefetch_factor: 100
   use_gpu: True
 
   # Wandb logging
@@ -84,15 +84,15 @@ experiment:
   use_wandb: False
 
   # How many steps to checkpoint between.
-  ckpt_freq: 1000
+  ckpt_freq: 10000
   # Take early checkpoint at step 100. Helpful for catching eval bugs early.
-  early_ckpt: False
+  early_ckpt: True
 
   # Checkpoint directory to warm start from.
   warm_start: null
   use_warm_start_conf: False
-  multi_gpu_size: 4
-  prefetch_factor: 100
+  ckpt_dir: ./ckpt/
+  multi_gpu_size: 1
 
   # Loss weights.
   trans_loss_weight: 1.0
@@ -110,3 +110,9 @@ experiment:
   noise_scale: 1.0
   # Filled in during training.
   num_parameters: null
+
+hydra:
+  sweeper:
+    params:
+      experiment.name: fixed_gradients
+      experiment.use_wandb: True
