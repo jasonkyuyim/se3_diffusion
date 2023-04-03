@@ -681,7 +681,6 @@ class IpaScore(nn.Module):
 
             # Stop gradients passing through rotations
             curr_R = curr_R.detach()
-            #curr_trans = curr_trans.detach()
 
             if torch.any(curr_R.isnan()):
                 print("curr rots is somewhere nan in block", b)
