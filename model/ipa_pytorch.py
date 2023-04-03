@@ -622,6 +622,7 @@ class IpaScore(nn.Module):
 
         init_trans = init_trans.type(torch.float64)
         curr_R, curr_trans = torch.clone(init_R), torch.clone(init_trans)
+        frames_by_block = {}
 
         # Main trunk
         curr_trans = self.scale_pos(curr_trans)
@@ -654,6 +655,34 @@ class IpaScore(nn.Module):
                 rigid_update.to(curr_R.dtype),
                 diffuse_mask[..., None].to(curr_R.dtype))
 
+
+            # Compute score approximation as the conditional score (using IGSO3
+            # transition kernel)
+            rot_score = self.diffuser.calc_rot_score(init_R, curr_R, input_feats['t']).to(init_R.device)
+            if torch.any(rot_score.isnan()): print("rot score is somewhere nan")
+            rot_score = rot_score * node_mask[..., None, None]
+
+            curr_trans_unscale = self.unscale_pos(curr_trans)
+            trans_score = self.diffuser.calc_trans_score(
+                init_trans,
+                curr_trans_unscale,
+                input_feats['t'][:, None, None],
+                use_torch=True,
+            )
+
+            # Add score estimates by block
+            frames_by_block[f"R_update_{b}"] = curr_R.clone()
+            frames_by_block[f"trans_update_{b}"] = curr_trans_unscale.clone()
+
+            trans_score = trans_score * node_mask[..., None]
+            frames_by_block[f'rot_score_{b}'] = rot_score
+            frames_by_block[f'trans_score_{b}'] = trans_score
+
+
+            # Stop gradients passing through rotations
+            curr_R = curr_R.detach()
+            #curr_trans = curr_trans.detach()
+
             if torch.any(curr_R.isnan()):
                 print("curr rots is somewhere nan in block", b)
                 import ipdb; ipdb.set_trace()
@@ -663,20 +692,6 @@ class IpaScore(nn.Module):
                     node_embed, edge_embed)
                 edge_embed *= edge_mask[..., None]
 
-        # Compute score approximation as the conditional score (using IGSO3
-        # transition kernel)
-        rot_score = self.diffuser.calc_rot_score(init_R, curr_R, input_feats['t']).to(init_R.device)
-        if torch.any(rot_score.isnan()): print("rot score is somewhere nan")
-        rot_score = rot_score * node_mask[..., None, None]
-
-        curr_trans = self.unscale_pos(curr_trans)
-        trans_score = self.diffuser.calc_trans_score(
-            init_trans,
-            curr_trans,
-            input_feats['t'][:, None, None],
-            use_torch=True,
-        )
-        trans_score = trans_score * node_mask[..., None]
 
         _, psi_pred = self.torsion_pred(node_embed)
 
@@ -686,12 +701,13 @@ class IpaScore(nn.Module):
             'trans_score': trans_score,
         }
         model_out['R_final'] =  curr_R
-        model_out['trans_final'] =  curr_trans
+        model_out['trans_final'] =  curr_trans_unscale
+        model_out.update(frames_by_block)
 
 
         # Save final rigids
         model_out['final_rigids'] = Rigid(
-                rots=Rotation(rot_mats=curr_R), trans=curr_trans)
+                rots=Rotation(rot_mats=curr_R), trans=curr_trans_unscale)
 
 
         return model_out

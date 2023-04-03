@@ -262,7 +262,6 @@ class Experiment:
         self._optimizer.zero_grad()
         loss, aux_data = self.loss_fn(data)
 
-
         loss.backward()
 
         # Print out the norm of the gradients
@@ -278,7 +277,7 @@ class Experiment:
                 if param.grad is not None and torch.isnan(param.grad).any():
                     self._log.info(f'Gradient of {name} has nans')
                     param.grad = torch.zeros_like(param.grad)
-            self._log.info(f'Gradient norm sum: {norm_sum}')
+            #self._log.info(f'Gradient norm sum: {norm_sum}')
 
         self._optimizer.step()
         return loss, aux_data
@@ -517,39 +516,50 @@ class Experiment:
         trans_score_scaling = batch['trans_score_scaling']
         batch_loss_mask = torch.any(bb_mask, dim=-1)
 
-        pred_rot_score = model_out['rot_score'] * diffuse_mask[..., None, None]
-        pred_trans_score = model_out['trans_score'] * diffuse_mask[..., None]
 
-        # Translation score loss
-        trans_score_mse = (gt_trans_score - pred_trans_score)**2 * loss_mask[..., None]
-        trans_score_loss = torch.sum(
-            trans_score_mse / trans_score_scaling[:, None, None]**2,
-            dim=(-1, -2)
-        ) / (loss_mask.sum(dim=-1) + 1e-10)
 
         # Translation x0 loss
         gt_trans_x0 = batch['rigids_0'][..., 4:] * self._exp_conf.coordinate_scaling
-        pred_trans_x0 = model_out['rigids'][..., 4:] * self._exp_conf.coordinate_scaling
-        trans_x0_loss = torch.sum(
-            (gt_trans_x0 - pred_trans_x0)**2 * loss_mask[..., None],
-            dim=(-1, -2)
-        ) / (loss_mask.sum(dim=-1) + 1e-10)
 
-        trans_loss = (
-            trans_score_loss * (batch['t'] > self._exp_conf.trans_x0_threshold)
-            + trans_x0_loss * (batch['t'] <= self._exp_conf.trans_x0_threshold)
-        )
-        trans_loss *= self._exp_conf.trans_loss_weight
-        trans_loss *= int(self._diff_conf.diffuse_trans)
+        rot_loss = 0.
+        trans_loss = 0.
+        num_blocks = self._model_conf.ipa.num_blocks
+        for b in range(num_blocks):
+            pred_rot_score_b = model_out[f'rot_score_{b}'] * diffuse_mask[..., None, None]
+            pred_trans_score_b = model_out[f'trans_score_{b}'] * diffuse_mask[..., None]
 
-        # Rotation loss
-        rot_mse = (gt_rot_score - pred_rot_score)**2 * loss_mask[..., None, None]
-        rot_loss = torch.sum(
-            rot_mse / rot_score_scaling[:, None, None, None]**2,
-            dim=(-1, -2, -3)
-        ) / (loss_mask.sum(dim=-1) + 1e-10)
-        rot_loss *= self._exp_conf.rot_loss_weight
-        rot_loss *= int(self._diff_conf.diffuse_rot)
+            # Translation Loss
+            pred_trans_x0_b = model_out[f'trans_update_{b}'] * self._exp_conf.coordinate_scaling
+            trans_x0_loss_b = torch.sum(
+                (gt_trans_x0 - pred_trans_x0_b)**2 * loss_mask[..., None],
+                dim=(-1, -2)
+            ) / (loss_mask.sum(dim=-1) + 1e-10)
+
+            # Translation score loss
+            trans_score_mse_b = (gt_trans_score - pred_trans_score_b)**2 * loss_mask[..., None]
+            trans_score_loss_b = torch.sum(
+                trans_score_mse_b / trans_score_scaling[:, None, None]**2,
+                dim=(-1, -2)
+            ) / (loss_mask.sum(dim=-1) + 1e-10)
+             
+            trans_loss_b = (
+                trans_score_loss_b * (batch['t'] > self._exp_conf.trans_x0_threshold) + 
+                trans_x0_loss_b * (batch['t'] <= self._exp_conf.trans_x0_threshold)
+            )
+            trans_loss_b *= self._exp_conf.trans_loss_weight
+            trans_loss_b *= int(self._diff_conf.diffuse_trans)
+
+            # Rotation loss
+            rot_mse = (gt_rot_score - pred_rot_score_b)**2 * loss_mask[..., None, None]
+            rot_loss_b = torch.sum(
+                rot_mse / rot_score_scaling[:, None, None, None]**2,
+                dim=(-1, -2, -3)
+            ) / (loss_mask.sum(dim=-1) + 1e-10)
+            rot_loss_b *= self._exp_conf.rot_loss_weight
+            rot_loss_b *= int(self._diff_conf.diffuse_rot)
+
+            trans_loss += trans_loss_b/num_blocks
+            rot_loss += rot_loss_b/num_blocks
 
         # Backbone atom loss
         pred_atom37 = model_out['atom37'][:, :, :5]
@@ -634,13 +644,9 @@ class Experiment:
                 print(f"NaN detected in {k}")
                 import ipdb; ipdb.set_trace()
 
-        # Maintain a history of the past N number of steps.
-        # Helpful for debugging.
-        self._aux_data_history.append({
-            'aux_data': aux_data,
-            'model_out': model_out,
-            'batch': batch
-        })
+        # Detach in everything in aux_data.
+        for k, v in aux_data.items():
+            aux_data[k] = v.detach()
 
         assert final_loss.shape == (batch_size,)
         assert batch_loss_mask.shape == (batch_size,)

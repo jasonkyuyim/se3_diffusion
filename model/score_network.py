@@ -202,11 +202,15 @@ class ScoreNetwork(nn.Module):
         psi_pred = self._apply_mask(
             model_out['psi'], gt_psi, 1 - fixed_mask[..., None])
 
-        pred_out = {
-            'psi': psi_pred,
-            'rot_score': model_out['rot_score'],
-            'trans_score': model_out['trans_score'],
-        }
+        pred_out = {'psi': psi_pred}
+        # Add trans_score and rot_score for each IPA block
+        for b in range(self.score_model._ipa_conf.num_blocks):
+            pred_out[f'rot_score_{b}'] = model_out[f'rot_score_{b}']
+            pred_out[f'trans_score_{b}'] = model_out[f'trans_score_{b}']
+            pred_out[f'R_update_{b}'] = model_out[f'R_update_{b}']
+            pred_out[f'trans_update_{b}'] = model_out[f'trans_update_{b}']
+        pred_out['rot_score'] = model_out['rot_score']
+        pred_out['trans_score'] = model_out['trans_score']
         rigids_pred = model_out['final_rigids']
         pred_out['rigids'] = rigids_pred.to_tensor_7()
         bb_representations = all_atom.compute_backbone(rigids_pred, psi_pred)
