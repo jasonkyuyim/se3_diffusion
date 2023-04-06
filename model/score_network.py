@@ -22,7 +22,7 @@ def get_index_embedding(indices, embed_size, max_len=2056):
     Returns:
         positional embedding of shape [N, embed_size]
     """
-    K = torch.arange(embed_size//2).to(indices.device)
+    K = torch.arange(embed_size//2, device=indices.device)
     pos_embedding_sin = torch.sin(
         indices[..., None] * math.pi / (max_len**(2*K[None]/embed_size))).to(indices.device)
     pos_embedding_cos = torch.cos(
