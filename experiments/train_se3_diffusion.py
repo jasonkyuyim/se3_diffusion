@@ -63,6 +63,10 @@ class Experiment:
                 order='memory', limit = 8)])
 
         # Warm starting
+        ckpt_model = None
+        ckpt_opt = None
+        self.trained_epochs = 0
+        self.trained_steps = 0
         if conf.experiment.warm_start:
             ckpt_dir = conf.experiment.warm_start
             self._log.info(f'Warm starting from: {ckpt_dir}')
@@ -77,13 +81,20 @@ class Experiment:
             self._log.info(f'Loading checkpoint from {ckpt_path}')
             ckpt_pkl = du.read_pkl(ckpt_path, use_torch=True)
             ckpt_model = ckpt_pkl['model']
+
             if conf.experiment.use_warm_start_conf:
                 OmegaConf.set_struct(conf, False)
                 conf = OmegaConf.merge(conf, ckpt_pkl['conf'])
                 OmegaConf.set_struct(conf, True)
             conf.experiment.warm_start = ckpt_dir
-        else:
-            ckpt_model = None
+
+            # For compatibility with older checkpoints.
+            if 'optimizer' in ckpt_pkl:
+                ckpt_opt = ckpt_pkl['optimizer']
+            if 'epoch' in ckpt_pkl:
+                self.trained_epochs = ckpt_pkl['epoch']
+            if 'step' in ckpt_pkl:
+                self.trained_steps = ckpt_pkl['step']
 
         # Configs
         self._conf = conf
@@ -97,8 +108,6 @@ class Experiment:
         self._use_wandb = self._exp_conf.use_wandb
 
         # Initialize experiment objects
-        self.trained_epochs = 0
-        self.trained_steps = 0
         self._diffuser = se3_diffuser.SE3Diffuser(self._diff_conf)
         self._model = score_network.ScoreNetwork(
             self._model_conf, self.diffuser)
@@ -112,6 +121,8 @@ class Experiment:
         self._log.info(f'Number of model parameters {num_parameters}')
         self._optimizer = torch.optim.Adam(
             self._model.parameters(), lr=self._exp_conf.learning_rate)
+        if ckpt_opt is not None:
+            self._optimizer.load_state_dict(ckpt_opt, strict=True)
 
         dt_string = datetime.now().strftime("%dD_%mM_%YY_%Hh_%Mm_%Ss")
         if self._exp_conf.ckpt_dir is not None:
@@ -247,11 +258,15 @@ class Experiment:
                 train_sampler.set_epoch(epoch)
             if valid_sampler is not None:
                 valid_sampler.set_epoch(epoch)
+            self.trained_epochs = epoch
             epoch_log = self.train_epoch(
-                    train_loader, valid_loader, device, return_logs)
+                train_loader,
+                valid_loader,
+                device,
+                return_logs=return_logs
+            )
             if return_logs:
                 logs.append(epoch_log)
-            self.trained_epochs = epoch
 
         self._log.info('Done')
         return logs
@@ -264,7 +279,8 @@ class Experiment:
         self._optimizer.step()
         return loss, aux_data
 
-    def train_epoch(self, train_loader, valid_loader, device, return_logs=False):
+    def train_epoch(
+            self, train_loader, valid_loader, device, return_logs=False):
         log_lossses = defaultdict(list)
         global_logs = []
         log_time = time.time()
@@ -301,8 +317,15 @@ class Experiment:
                 ckpt_path = os.path.join(
                     self._exp_conf.ckpt_dir, f'step_{self.trained_steps}.pth')
                 du.write_checkpoint(
-                    ckpt_path, self.model.state_dict(), self._conf,
-                    logger=self._log, use_torch=True)
+                    ckpt_path,
+                    self.model.state_dict(),
+                    self._conf,
+                    self._optimizer.state_dict(),
+                    self.trained_epochs,
+                    self.trained_steps,
+                    logger=self._log,
+                    use_torch=True
+                )
 
                 # Run evaluation
                 self._log.info(f'Running evaluation of {ckpt_path}')

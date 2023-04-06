@@ -325,6 +325,9 @@ def write_checkpoint(
         ckpt_path: str,
         model,
         conf,
+        optimizer,
+        epoch,
+        step,
         logger=None,
         use_torch=True,
     ):
@@ -332,7 +335,10 @@ def write_checkpoint(
 
     Args:
         ckpt_path: Path to save checkpoint.
-        step: Experiment step at time of checkpoint.
+        conf: Experiment configuration.
+        optimizer: Optimizer state dict.
+        epoch: Training epoch at time of checkpoint.
+        step: Training steps at time of checkpoint.
         exp_state: Experiment state to be written to pickle.
         preds: Model predictions to be written as part of checkpoint.
     """
@@ -344,7 +350,16 @@ def write_checkpoint(
         logger.info(f'Serializing experiment state to {ckpt_path}')
     else:
         print(f'Serializing experiment state to {ckpt_path}')
-    write_pkl(ckpt_path, {'model': model, 'conf': conf}, use_torch=use_torch)
+    write_pkl(
+        ckpt_path,
+        {
+            'model': model,
+            'conf': conf,
+            'optimizer': optimizer,
+            'epoch': epoch,
+            'step': step
+        },
+        use_torch=use_torch)
 
 def concat_np_features(
         np_dicts: List[Dict[str, np.ndarray]], add_batch_dim: bool):
