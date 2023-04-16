@@ -23,7 +23,7 @@ import torch
 Protein = protein.Protein
 
 # Global map from chain characters to integers.
-ALPHANUMERIC = string.ascii_letters + string.digits
+ALPHANUMERIC = string.ascii_letters + string.digits + ' '
 CHAIN_TO_INT = {
     chain_char: i for i, chain_char in enumerate(ALPHANUMERIC)
 }
