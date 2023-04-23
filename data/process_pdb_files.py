@@ -16,6 +16,9 @@ import os
 import multiprocessing as mp
 import time
 from Bio import PDB
+import numpy as np
+import mdtraj as md
+
 
 from data import utils as du
 from data import errors
@@ -99,7 +102,37 @@ def process_file(file_path: str, write_dir: str):
     # Process geometry features
     complex_aatype = complex_feats['aatype']
     metadata['seq_len'] = len(complex_aatype)
+    modeled_idx = np.where(complex_aatype != 20)[0]
+    if np.sum(complex_aatype != 20) == 0:
+        raise errors.LengthError('No modeled residues')
+    min_modeled_idx = np.min(modeled_idx)
+    max_modeled_idx = np.max(modeled_idx)
+    metadata['modeled_seq_len'] = max_modeled_idx - min_modeled_idx + 1
+    complex_feats['modeled_idx'] = modeled_idx
+    
+    try:
+        
 
+        # MDtraj
+        traj = md.load(file_path)
+        # SS calculation
+        pdb_ss = md.compute_dssp(traj, simplified=True)
+        # DG calculation
+        pdb_dg = md.compute_rg(traj)
+        os.remove(file_path)
+    except Exception as e:
+        os.remove(file_path)
+        raise errors.DataError(f'Mdtraj failed with error {e}')
+
+    chain_dict['ss'] = pdb_ss[0]
+    metadata['coil_percent'] = np.sum(pdb_ss == 'C') / metadata['modeled_seq_len']
+    metadata['helix_percent'] = np.sum(pdb_ss == 'H') / metadata['modeled_seq_len']
+    metadata['strand_percent'] = np.sum(pdb_ss == 'E') / metadata['modeled_seq_len']
+
+    # Radius of gyration
+    metadata['radius_gyration'] = pdb_dg[0]
+    
+    
     # Write features to pickles.
     du.write_pkl(processed_path, complex_feats)
 

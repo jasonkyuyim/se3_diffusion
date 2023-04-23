@@ -88,7 +88,8 @@ class PdbDataset(data.Dataset):
         if filter_conf.min_beta_percent is not None:
             pdb_csv = pdb_csv[
                 pdb_csv.strand_percent > filter_conf.min_beta_percent]
-        if filter_conf.rog_quantile > 0.0:
+        if filter_conf.rog_quantile is not None \
+            and filter_conf.rog_quantile > 0.0:
             prot_rog_low_pass = _rog_quantile_curve(
                 pdb_csv, 
                 filter_conf.rog_quantile,
