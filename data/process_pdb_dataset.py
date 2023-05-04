@@ -9,20 +9,18 @@
 import argparse
 import dataclasses
 import functools as fn
-import pandas as pd
-import os
 import multiprocessing as mp
+import os
 import time
-from tqdm import tqdm
-import numpy as np
+
 import mdtraj as md
-from Bio.PDB import MMCIFParser, PDBIO
+import numpy as np
+import pandas as pd
+from Bio.PDB import PDBIO, MMCIFParser
+from tqdm import tqdm
 
-from data import mmcif_parsing
+from data import errors, mmcif_parsing, parsers
 from data import utils as du
-from data import errors
-from data import parsers
-
 
 # Define the parser
 parser = argparse.ArgumentParser(
@@ -77,7 +75,6 @@ def _retrieve_mmcif_files(
     print('Gathering mmCIF paths')
     total_num_files = 0
     all_mmcif_paths = []
-    mmcif_dir = args.mmcif_dir
     for subdir in tqdm(os.listdir(mmcif_dir)):
         mmcif_file_dir = os.path.join(mmcif_dir, subdir)
         if not os.path.isdir(mmcif_file_dir):
@@ -121,9 +118,14 @@ def process_mmcif(
     processed_mmcif_path = os.path.join(mmcif_subdir, f'{mmcif_name}.pkl')
     processed_mmcif_path = os.path.abspath(processed_mmcif_path)
     metadata['processed_path'] = processed_mmcif_path
-    with open(mmcif_path, 'r') as f:
-        parsed_mmcif = mmcif_parsing.parse(
-            file_id=mmcif_name, mmcif_string=f.read())
+    try:
+        with open(mmcif_path, 'r') as f:
+            parsed_mmcif = mmcif_parsing.parse(
+                file_id=mmcif_name, mmcif_string=f.read())
+    except:
+        raise errors.MmcifParsingError(
+            f'Error parsing {mmcif_path}'
+        )
     metadata['raw_path'] = mmcif_path
     if parsed_mmcif.errors:
         raise errors.MmcifParsingError(
