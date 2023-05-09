@@ -82,7 +82,7 @@ class Experiment:
         if self._use_ddp :
             torch.cuda.set_device(int(os.environ["LOCAL_RANK"]))
             dist.init_process_group(backend='nccl')
-            self.ddp_info = self.get_ddp_info()
+            self.ddp_info = eu.get_ddp_info()
             if self.ddp_info['rank'] not in [0,-1]:
                 self._log.addHandler(logging.NullHandler())
                 self._log.setLevel("ERROR")
@@ -151,8 +151,7 @@ class Experiment:
                 os.makedirs(ckpt_dir, exist_ok=True)
             self._exp_conf.ckpt_dir = ckpt_dir
             self._log.info(f'Checkpoints saved to: {ckpt_dir}')
-        else:
-            
+        else:  
             self._log.info('Checkpoint not being saved.')
         if self._exp_conf.eval_dir is not None :
             eval_dir = os.path.join(
@@ -177,13 +176,6 @@ class Experiment:
     @property
     def conf(self):
         return self._conf
-
-    def get_ddp_info(self):
-        local_rank = int(os.environ["LOCAL_RANK"])
-        rank = dist.get_rank()
-        world_size = dist.get_world_size()
-        node_id = rank // world_size
-        return {"node_id": node_id, "local_rank": local_rank, "rank": rank, "world_size": world_size}
 
     def create_dataset(self):
 
@@ -283,28 +275,18 @@ class Experiment:
                     self._log.info(f"Multi-GPU training on GPUs in DDP mode, node_id : {self.ddp_info['node_id']}, devices: {device_ids}")
                 #DP mode
                 else:
-                    assert(len(self._available_gpus)>self._exp_conf.num_gpus,f"require {self._exp_conf.num_gpus} GPUs, but only {len(self._available_gpus)} GPUs available ")
-                    self._model = self.model.to(device)
-                    self._model = DP(self._model, device_ids=device_ids)
+                    if len(self._available_gpus)>self._exp_conf.num_gpus:
+                        raise ValueError(f"require {self._exp_conf.num_gpus} GPUs, but only {len(self._available_gpus)} GPUs available ")
                     self._log.info(f"Multi-GPU training on GPUs in DP mode: {device_ids}")
+                    gpu_id = self._available_gpus[replica_id]
+                    device = f"cuda:{gpu_id}"
+                    self._model = DP(self._model, device_ids=device_ids)
+                    self._model = self.model.to(device)
         else:
             device = 'cpu'
             self._model = self.model.to(device)
             self._log.info(f"Using device: {device}")
 
-        if self._exp_conf.num_gpus > 1:
-            device_ids = [
-                f"cuda:{i}" for i in self._available_gpus[:self._exp_conf.num_gpus]
-            ]
-            self._log.info(f"Multi-GPU training on GPUs: {device_ids}")
-            # intialize with ddp mode
-            if self._use_ddp :
-                device = torch.device("cuda",self.ddp_info['local_rank'])
-                model = self.model.to(device)
-                self._model = DDP(model, device_ids=[self.ddp_info['local_rank']], output_device=self.ddp_info['local_rank'],find_unused_parameters=True)
-            else:
-                self._model = self.model.to(device)
-                self._model = DP(self._model, device_ids=device_ids)
         self._model.train()
 
         (
@@ -681,7 +663,6 @@ class Experiment:
 
         assert final_loss.shape == (batch_size,)
         assert batch_loss_mask.shape == (batch_size,)
-        # print(f"model_out : {model_out} , aux_data : {aux_data} ,final loss : {final_loss},batch_loss_mask.sum() : {batch_loss_mask.sum()} ")
         return normalize_loss(final_loss), aux_data
 
     def _calc_trans_0(self, trans_score, trans_t, t):

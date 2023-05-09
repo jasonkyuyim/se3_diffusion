@@ -80,6 +80,8 @@ def _retrieve_mmcif_files(
         if not os.path.isdir(mmcif_file_dir):
             continue
         for mmcif_file in os.listdir(mmcif_file_dir):
+            if not mmcif_file.endswith('.cif'):
+                continue
             mmcif_path = os.path.join(mmcif_file_dir, mmcif_file)
             total_num_files += 1
             if min_file_size <= os.path.getsize(mmcif_path) <= max_file_size:
@@ -123,8 +125,8 @@ def process_mmcif(
             parsed_mmcif = mmcif_parsing.parse(
                 file_id=mmcif_name, mmcif_string=f.read())
     except:
-        raise errors.MmcifParsingError(
-            f'Error parsing {mmcif_path}'
+        raise errors.FileExistsError(
+            f'Error file do not exist {mmcif_path}'
         )
     metadata['raw_path'] = mmcif_path
     if parsed_mmcif.errors:
