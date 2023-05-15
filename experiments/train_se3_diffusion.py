@@ -44,6 +44,8 @@ from data import all_atom
 from model import score_network
 from experiments import utils as eu
 
+# import autonvtx
+
 
 class Experiment:
 
@@ -111,6 +113,11 @@ class Experiment:
         self._diffuser = se3_diffuser.SE3Diffuser(self._diff_conf)
         self._model = score_network.ScoreNetwork(
             self._model_conf, self.diffuser)
+        
+        ###
+        # autonvtx(self._model)
+        # torch.cuda.profiler.start()
+        ###
 
         if ckpt_model is not None:
             ckpt_model = {k.replace('module.', ''):v for k,v in ckpt_model.items()}
@@ -294,6 +301,12 @@ class Experiment:
             for k,v in aux_data.items():
                 log_lossses[k].append(du.move_to_np(v))
             self.trained_steps += 1
+            
+            ###
+            time.sleep(2)
+            ###
+            
+            # if self.train_steps
 
             # Logging to terminal
             if self.trained_steps == 1 or self.trained_steps % self._exp_conf.log_freq == 0:
@@ -755,6 +768,8 @@ def run(conf: DictConfig) -> None:
 
     exp = Experiment(conf=conf)
     exp.start_training()
+    
+    # torch.cuda.profiler.stop()
 
 
 if __name__ == '__main__':
