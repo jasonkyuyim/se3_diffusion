@@ -31,7 +31,9 @@ from collections import deque
 from datetime import datetime
 from omegaconf import DictConfig
 from omegaconf import OmegaConf
-from torch.nn.parallel import DataParallel as DP
+from torch.nn import DataParallel as DP
+from torch.nn.parallel import DistributedDataParallel as DDP
+import torch.distributed as dist
 from openfold.utils import rigid_utils as ru
 from hydra.core.hydra_config import HydraConfig
 
@@ -62,6 +64,30 @@ class Experiment:
             [str(x) for x in GPUtil.getAvailable(
                 order='memory', limit = 8)])
 
+        # Configs
+        self._conf = conf
+        self._exp_conf = conf.experiment
+        if HydraConfig.initialized() and 'num' in HydraConfig.get().job:
+            self._exp_conf.name = (
+                f'{self._exp_conf.name}_{HydraConfig.get().job.num}')
+        self._diff_conf = conf.diffuser
+        self._model_conf = conf.model
+        self._data_conf = conf.data
+        self._use_wandb = self._exp_conf.use_wandb
+        self._use_ddp = self._exp_conf.use_ddp
+        # 1. initialize ddp info if in ddp mode
+        # 2. silent rest of logger when use ddp mode
+        # 3. silent wandb logger
+        # 4. unset checkpoint path if rank is not 0 to avoid saving checkpoints and evaluation
+        if self._use_ddp :
+            torch.cuda.set_device(int(os.environ["LOCAL_RANK"]))
+            dist.init_process_group(backend='nccl')
+            self.ddp_info = eu.get_ddp_info()
+            if self.ddp_info['rank'] not in [0,-1]:
+                self._log.addHandler(logging.NullHandler())
+                self._log.setLevel("ERROR")
+                self._use_wandb = False
+                self._exp_conf.ckpt_dir = None
         # Warm starting
         ckpt_model = None
         ckpt_opt = None
@@ -96,16 +122,6 @@ class Experiment:
             if 'step' in ckpt_pkl:
                 self.trained_steps = ckpt_pkl['step']
 
-        # Configs
-        self._conf = conf
-        self._exp_conf = conf.experiment
-        if HydraConfig.initialized() and 'num' in HydraConfig.get().job:
-            self._exp_conf.name = (
-                f'{self._exp_conf.name}_{HydraConfig.get().job.num}')
-        self._diff_conf = conf.diffuser
-        self._model_conf = conf.model
-        self._data_conf = conf.data
-        self._use_wandb = self._exp_conf.use_wandb
 
         # Initialize experiment objects
         self._diffuser = se3_diffuser.SE3Diffuser(self._diff_conf)
@@ -122,7 +138,7 @@ class Experiment:
         self._optimizer = torch.optim.Adam(
             self._model.parameters(), lr=self._exp_conf.learning_rate)
         if ckpt_opt is not None:
-            self._optimizer.load_state_dict(ckpt_opt, strict=True)
+            self._optimizer.load_state_dict(ckpt_opt)
 
         dt_string = datetime.now().strftime("%dD_%mM_%YY_%Hh_%Mm_%Ss")
         if self._exp_conf.ckpt_dir is not None:
@@ -135,6 +151,9 @@ class Experiment:
                 os.makedirs(ckpt_dir, exist_ok=True)
             self._exp_conf.ckpt_dir = ckpt_dir
             self._log.info(f'Checkpoints saved to: {ckpt_dir}')
+        else:  
+            self._log.info('Checkpoint not being saved.')
+        if self._exp_conf.eval_dir is not None :
             eval_dir = os.path.join(
                 self._exp_conf.eval_dir,
                 self._exp_conf.name,
@@ -142,8 +161,8 @@ class Experiment:
             self._exp_conf.eval_dir = eval_dir
             self._log.info(f'Evaluation saved to: {eval_dir}')
         else:
-            self._log.info('Checkpoint not being saved.')
-
+            self._exp_conf.eval_dir = os.devnull
+            self._log.info(f'Evaluation will not be saved.')
         self._aux_data_history = deque(maxlen=100)
 
     @property
@@ -172,13 +191,18 @@ class Experiment:
             diffuser=self._diffuser,
             is_training=False
         )
-
-        train_sampler = pdb_data_loader.TrainSampler(
-            data_conf=self._data_conf,
-            dataset=train_dataset,
-            batch_size=self._exp_conf.batch_size,
-        )
-
+        if not self._use_ddp:
+            train_sampler = pdb_data_loader.TrainSampler(
+                data_conf=self._data_conf,
+                dataset=train_dataset,
+                batch_size=self._exp_conf.batch_size,
+            )
+        else:
+            train_sampler = pdb_data_loader.DistributedTrainSampler(
+                data_conf=self._data_conf,
+                dataset=train_dataset,
+                batch_size=self._exp_conf.batch_size,
+            )
         valid_sampler = None
 
         # Loaders
@@ -188,7 +212,7 @@ class Experiment:
             sampler=train_sampler,
             np_collate=False,
             length_batch=True,
-            batch_size=self._exp_conf.batch_size,
+            batch_size=self._exp_conf.batch_size if not self._exp_conf.use_ddp else self._exp_conf.batch_size // self.ddp_info['world_size'],
             shuffle=False,
             num_workers=num_workers,
             drop_last=False,
@@ -228,21 +252,41 @@ class Experiment:
             replica_id = 0
         if self._use_wandb and replica_id == 0:
                 self.init_wandb()
+        assert(not self._exp_conf.use_ddp or self._exp_conf.use_gpu)
 
+        # GPU mode
         if torch.cuda.is_available() and self._exp_conf.use_gpu:
-            gpu_id = self._available_gpus[replica_id]
-            device = f"cuda:{gpu_id}"
+            # single GPU mode
+            if self._exp_conf.num_gpus==1 :
+                gpu_id = self._available_gpus[replica_id]
+                device = f"cuda:{gpu_id}"
+                self._model = self.model.to(device)
+                self._log.info(f"Using device: {device}")
+            #muti gpu mode
+            elif self._exp_conf.num_gpus > 1:
+                device_ids = [
+                f"cuda:{i}" for i in self._available_gpus[:self._exp_conf.num_gpus]
+                ]
+                #DDP mode
+                if self._use_ddp :
+                    device = torch.device("cuda",self.ddp_info['local_rank'])
+                    model = self.model.to(device)
+                    self._model = DDP(model, device_ids=[self.ddp_info['local_rank']], output_device=self.ddp_info['local_rank'],find_unused_parameters=True)
+                    self._log.info(f"Multi-GPU training on GPUs in DDP mode, node_id : {self.ddp_info['node_id']}, devices: {device_ids}")
+                #DP mode
+                else:
+                    if len(self._available_gpus)>self._exp_conf.num_gpus:
+                        raise ValueError(f"require {self._exp_conf.num_gpus} GPUs, but only {len(self._available_gpus)} GPUs available ")
+                    self._log.info(f"Multi-GPU training on GPUs in DP mode: {device_ids}")
+                    gpu_id = self._available_gpus[replica_id]
+                    device = f"cuda:{gpu_id}"
+                    self._model = DP(self._model, device_ids=device_ids)
+                    self._model = self.model.to(device)
         else:
             device = 'cpu'
-        self._log.info(f"Using device: {device}")
+            self._model = self.model.to(device)
+            self._log.info(f"Using device: {device}")
 
-        if self._exp_conf.num_gpus > 1:
-            device_ids = [
-                f"cuda:{i}" for i in self._available_gpus[:self._exp_conf.num_gpus]
-            ]
-            self._log.info(f"Multi-GPU training on GPUs: {device_ids}")
-            self._model = DP(self._model, device_ids=device_ids)
-        self._model = self.model.to(device)
         self._model.train()
 
         (

@@ -163,3 +163,16 @@ cython_debug/
 #.idea/
 data/data/
 outputs/
+
+#PDB processed dataset
+data/processed_pdb/
+data/processed_pdb_openfold/
+
+#PDBBind dataset
+DiffusionProteinLigand/data/PDBBind*
+
+#pynb for debug code
+pynb/
+
+#slurm_output for record
+slurm_output/

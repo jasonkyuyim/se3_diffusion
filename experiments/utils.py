@@ -1,12 +1,21 @@
 """Utility functions for experiments."""
+import os
 import numpy as np
 import torch
 from typing import Optional
 import random
-
+import torch.distributed as dist
 from openfold.utils import rigid_utils
 
 Rigid = rigid_utils.Rigid
+
+
+def get_ddp_info():
+    local_rank = int(os.environ["LOCAL_RANK"])
+    rank = dist.get_rank()
+    world_size = dist.get_world_size()
+    node_id = rank // world_size
+    return {"node_id": node_id, "local_rank": local_rank, "rank": rank, "world_size": world_size}
 
 
 def flatten_dict(raw_dict):
