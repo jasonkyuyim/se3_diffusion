@@ -166,3 +166,6 @@ outputs/
 
 divided/
 ckpt/
+
+# nsys
+nsys/
