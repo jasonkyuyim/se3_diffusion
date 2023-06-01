@@ -1,4 +1,8 @@
 mmCIF/
+.vscode/
+ckpt/
+multirun/
+wandb/
 
 inference_outputs/
 # Byte-compiled / optimized / DLL files
