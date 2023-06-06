@@ -3,6 +3,8 @@ mmCIF/
 ckpt/
 multirun/
 wandb/
+*.pdb
+*.csv
 
 inference_outputs/
 # Byte-compiled / optimized / DLL files

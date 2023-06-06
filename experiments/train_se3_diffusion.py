@@ -275,7 +275,7 @@ class Experiment:
                     self._log.info(f"Multi-GPU training on GPUs in DDP mode, node_id : {self.ddp_info['node_id']}, devices: {device_ids}")
                 #DP mode
                 else:
-                    if len(self._available_gpus)>self._exp_conf.num_gpus:
+                    if len(self._available_gpus) < self._exp_conf.num_gpus:
                         raise ValueError(f"require {self._exp_conf.num_gpus} GPUs, but only {len(self._available_gpus)} GPUs available ")
                     self._log.info(f"Multi-GPU training on GPUs in DP mode: {device_ids}")
                     gpu_id = self._available_gpus[replica_id]
@@ -578,6 +578,7 @@ class Experiment:
         ) / (loss_mask.sum(dim=-1) + 1e-10)
         rot_loss *= self._exp_conf.rot_loss_weight
         rot_loss *= int(self._diff_conf.diffuse_rot)
+        rot_loss *= batch['t'] > self._exp_conf.rot_loss_t_filter
 
         # Backbone atom loss
         pred_atom37 = model_out['atom37'][:, :, :5]

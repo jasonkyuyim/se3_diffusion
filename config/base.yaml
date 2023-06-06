@@ -101,6 +101,7 @@ experiment:
   # Loss weights.
   trans_loss_weight: 1.0
   rot_loss_weight: 1.0
+  rot_loss_t_filter: 0.05
   trans_x0_threshold: 1.0
   coordinate_scaling: ${diffuser.r3.coordinate_scaling}
   bb_atom_loss_weight: 1.0
