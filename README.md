@@ -36,15 +36,50 @@ LICENSE: MIT
 
 ![framediff-landing-page](https://github.com/jasonkyuyim/se3_diffusion/blob/master/media/denoising.gif)
 
-# Table of Contents
+## Update
+
+### June 27, 2023
+
+- **Bucketize bug**. We discovered an unfortunate bug in the SO3 component of the score approximation computation. The issue was the use of `torch.bucketize` when accessing cached IGSO3 density values `torch_score` of `SO3Diffuser`; since the `bucketize` function does not track gradients, this operation effectively introduced a stopgrad on the angle of rotation component of the rotation score thereby expectedly blocking some gradients during training. We have fixed this now but it has caused model performance to change. 
+- **Clustered training.** We added the ability use clustered data during training. We found this to greatly improve sample diversity. See [Downloading PDB clusters](#downloading-pdb-clusters).
+- **New configs**. 
+  - `config/base.yaml` updated with the best parameters we have found. They surpass the ICML published results (see table). The changes are the following:
+    - Batching with `experiment.sampling_mode=cluster_time_batch`.
+    - A new rotation loss that includes explicit penalties of errors in the axis and angle components of the loss on conditional score estimate `experiment.separate_rot_loss=True`. This was part of the published model with the bug that we accidentally found to help. We found it beneficial to down-weight the angle term of the rotation loss, `experiment.rot_loss_weight=0.5`, and turn off the angle term for t<0.2, `experiment.rot_loss_t_threshold=0.2`. Though heuristic, we find this loss to further outperform the DSM loss by our metrics.
+  - `config/pure_dsm.yaml` same as `config/base.yaml` except has `experiment.separate_rot_loss=False` and instead uses the DSM rotation loss described in our paper, but without the `bucketize` bug.
+  - `config/icml_published.yaml` in case one wants to reproduce results from the ICML paper.
+
+We are still running some experiments to verify these improvements but we wanted to get this out sooner for researchers building on our codebase.
+Here is a table of our preliminary results so far:
+
+|                            | icml_published.yaml | base.yaml |
+| -------------------------- | ------------------- | --------- |
+| Designability (scRMSD < 2) | 0.29                | 0.34      |
+| Diversity (TM cutoff 0.5)  | 0.43                | 0.61      |
+
+We fine-tuned one of our checkpoints for the `base.yaml` results. `pure_dsm.yaml` model is training.
+We will update the table of `base.yaml` once it is finished training from scratch (unfortunately this takes at least a week).
+There's pretty strong signal that our new settings are showing large improvements across our metrics.
+
+The weights used to get the `icml_published.yaml` results are in `weights/paper_weights.pth` while the weights to get the `base.yaml`results are in `weights/best_weights.pth`.
+
+The authors are currently all very busy until the Fall (Jason is currently interning).
+However, we are committed to answering questions and fixing any bugs.
+Please email us or raise an issue if you have any concerns or questions.
+
+# Table of **Contents**
 - [SE(3) diffusion model with application to protein backbone generation](#se3-diffusion-model-with-application-to-protein-backbone-generation)
   - [Description](#description)
-- [Table of Contents](#table-of-contents)
+  - [Update](#update)
+    - [June 27, 2023](#june-27-2023)
+- [Table of **Contents**](#table-of-contents)
 - [Installation](#installation)
     - [Third party source code](#third-party-source-code)
 - [Inference](#inference)
 - [Training](#training)
     - [Downloading the PDB for training](#downloading-the-pdb-for-training)
+    - [Downloading PDB clusters](#downloading-pdb-clusters)
+    - [Batching modes](#batching-modes)
     - [Launching training](#launching-training)
     - [Intermittent evaluation](#intermittent-evaluation)
 - [Acknowledgements](#acknowledgements)
@@ -153,7 +188,42 @@ about each example for faster filtering.
 For PDB files, we provide some starter code in `process_pdb_files.py`  of how to
 modify `process_pdb_dataset.py` to work with PDB files (as we did at an earlier
 point in the project). **This has not been tested.** Please make a pull request
-if you create a PDB file processing script. 
+if you create a PDB file processing script.
+
+### Downloading PDB clusters
+To use clustered training data, download the clusters at 30% sequence identity
+at [rcsb](https://www.rcsb.org/docs/programmatic-access/file-download-services#sequence-clusters-data).
+This download link also works at time of writing:
+```
+https://cdn.rcsb.org/resources/sequence/clusters/clusters-by-entity-30.txt
+```
+Place this file in `data/processed_pdb` or anywhere in your file system.
+Update your config to point to the clustered data:
+```yaml
+data:
+  cluster_path: ./data/processed_pdb/clusters-by-entity-30.txt
+```
+To use clustered data, set `sample_mode` to either `cluster_time_batch` or `cluster_length_batch`.
+See next section for details.
+
+### Batching modes
+
+```yaml
+experiment:
+  # Use one of the following.
+
+  # Each batch contains multiple time steps of the same protein.
+  sample_mode: time_batch
+
+  # Each batch contains multiple proteins of the same length.
+  sample_mode: length_batch
+
+  # Each batch contains multiple time steps of a protein from a cluster.
+  sample_mode: cluster_time_batch
+
+  # Each batch contains multiple clusters of the same length.
+  sample_mode: cluster_length_batch
+```
 
 ### Launching training 
 `train_se3_diffusion.py` is the training script. It utilizes [Hydra](https://hydra.cc).

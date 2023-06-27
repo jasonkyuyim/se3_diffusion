@@ -20,6 +20,7 @@ import time
 import tree
 import numpy as np
 import wandb
+import copy
 import hydra
 import logging
 import copy
@@ -196,6 +197,7 @@ class Experiment:
                 data_conf=self._data_conf,
                 dataset=train_dataset,
                 batch_size=self._exp_conf.batch_size,
+                sample_mode=self._exp_conf.sample_mode,
             )
         else:
             train_sampler = pdb_data_loader.DistributedTrainSampler(
@@ -362,9 +364,9 @@ class Experiment:
                     self._exp_conf.ckpt_dir, f'step_{self.trained_steps}.pth')
                 du.write_checkpoint(
                     ckpt_path,
-                    self.model.state_dict(),
+                    copy.deepcopy(self.model.state_dict()),
                     self._conf,
-                    self._optimizer.state_dict(),
+                    copy.deepcopy(self._optimizer.state_dict()),
                     self.trained_epochs,
                     self.trained_steps,
                     logger=self._log,
@@ -571,14 +573,38 @@ class Experiment:
         trans_loss *= int(self._diff_conf.diffuse_trans)
 
         # Rotation loss
-        rot_mse = (gt_rot_score - pred_rot_score)**2 * loss_mask[..., None]
-        rot_loss = torch.sum(
-            rot_mse / rot_score_scaling[:, None, None]**2,
-            dim=(-1, -2)
-        ) / (loss_mask.sum(dim=-1) + 1e-10)
-        rot_loss *= self._exp_conf.rot_loss_weight
+        if self._exp_conf.separate_rot_loss:
+            gt_rot_angle = torch.norm(gt_rot_score, dim=-1, keepdim=True)
+            gt_rot_axis = gt_rot_score / (gt_rot_angle + 1e-6)
+
+            pred_rot_angle = torch.norm(pred_rot_score, dim=-1, keepdim=True)
+            pred_rot_axis = pred_rot_score / (pred_rot_angle + 1e-6)
+
+            # Separate loss on the axis
+            axis_loss = (gt_rot_axis - pred_rot_axis)**2 * loss_mask[..., None]
+            axis_loss = torch.sum(
+                axis_loss, dim=(-1, -2)
+            ) / (loss_mask.sum(dim=-1) + 1e-10)
+
+            # Separate loss on the angle
+            angle_loss = (gt_rot_angle - pred_rot_angle)**2 * loss_mask[..., None]
+            angle_loss = torch.sum(
+                angle_loss / rot_score_scaling[:, None, None]**2,
+                dim=(-1, -2)
+            ) / (loss_mask.sum(dim=-1) + 1e-10)
+            angle_loss *= self._exp_conf.rot_loss_weight
+            angle_loss *= batch['t'] > self._exp_conf.rot_loss_t_threshold
+            rot_loss = angle_loss + axis_loss
+        else:
+            rot_mse = (gt_rot_score - pred_rot_score)**2 * loss_mask[..., None]
+            rot_loss = torch.sum(
+                rot_mse / rot_score_scaling[:, None, None]**2,
+                dim=(-1, -2)
+            ) / (loss_mask.sum(dim=-1) + 1e-10)
+            rot_loss *= self._exp_conf.rot_loss_weight
+            rot_loss *= batch['t'] > self._exp_conf.rot_loss_t_threshold
         rot_loss *= int(self._diff_conf.diffuse_rot)
-        rot_loss *= batch['t'] > self._exp_conf.rot_loss_t_filter
+
 
         # Backbone atom loss
         pred_atom37 = model_out['atom37'][:, :, :5]

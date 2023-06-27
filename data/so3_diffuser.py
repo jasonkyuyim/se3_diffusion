@@ -6,7 +6,7 @@ import logging
 import torch
 
 
-def igso3_expansion(omega, eps, L=1000):
+def igso3_expansion(omega, eps, L=1000, use_torch=False):
     """Truncated sum of IGSO(3) distribution.
 
     This function approximates the power series in equation 5 of
@@ -24,11 +24,22 @@ def igso3_expansion(omega, eps, L=1000):
         omega: rotation of Euler vector (i.e. the angle of rotation)
         eps: std of IGSO(3).
         L: Truncation level
+        use_torch: set true to use torch tensors, otherwise use numpy arrays.
     """
-    p = 0
-    for l in range(L):
-        p += (2*l + 1) * np.exp(-l*(l+1)*eps**2/2) * np.sin(omega*(l+1/2)) / np.sin(omega/2)
-    return p
+
+    lib = torch if use_torch else np
+    ls = lib.arange(L)
+    if use_torch:
+        ls = ls.to(omega.device)
+    if len(omega.shape) > 1:
+        ls = ls[None, None]
+        omega = omega[..., None]
+        eps = eps[..., None]
+    p = (2*ls + 1) * lib.exp(-ls*(ls+1)*eps**2/2) * lib.sin(omega*(ls+1/2)) / lib.sin(omega/2)
+    if use_torch:
+        return p.sum(dim=-1)
+    else:
+        return p.sum(axis=-1)
 
 
 def density(expansion, omega, marginal=True):
@@ -50,7 +61,7 @@ def density(expansion, omega, marginal=True):
         return expansion / 8 / np.pi**2
 
 
-def score(exp, omega, eps, L=1000):  # score of density over SO(3)
+def score(exp, omega, eps, L=1000, use_torch=False):  # score of density over SO(3)
     """score uses the quotient rule to compute the scaling factor for the score
     of the IGSO(3) density.
 
@@ -69,18 +80,31 @@ def score(exp, omega, eps, L=1000):  # score of density over SO(3)
         eps: scale parameter for IGSO(3) -- as in expansion() this scaling
             differ from that in Leach by a factor of sqrt(2).
         L: truncation level
+        use_torch: set true to use torch tensors, otherwise use numpy arrays.
 
     Returns:
         The d/d omega log IGSO3(omega; eps)/(1-cos(omega))
 
     """
-    dSigma = 0
-    for l in range(L):
-        hi = np.sin(omega * (l + 1 / 2))
-        dhi = (l + 1 / 2) * np.cos(omega * (l + 1 / 2))
-        lo = np.sin(omega / 2)
-        dlo = 1 / 2 * np.cos(omega / 2)
-        dSigma += (2 * l + 1) * np.exp(-l * (l + 1) * eps**2/2) * (lo * dhi - hi * dlo) / lo ** 2
+
+    lib = torch if use_torch else np
+    ls = lib.arange(L)
+    if use_torch:
+        ls = ls.to(omega.device)
+    ls = ls[None]
+    if len(omega.shape) > 1:
+        ls = ls[None]
+    omega = omega[..., None]
+    eps = eps[..., None]
+    hi = lib.sin(omega * (ls + 1 / 2))
+    dhi = (ls + 1 / 2) * lib.cos(omega * (ls + 1 / 2))
+    lo = lib.sin(omega / 2)
+    dlo = 1 / 2 * lib.cos(omega / 2)
+    dSigma = (2 * ls + 1) * lib.exp(-ls * (ls + 1) * eps**2/2) * (lo * dhi - hi * dlo) / lo ** 2
+    if use_torch:
+        dSigma = dSigma.sum(dim=-1)
+    else:
+        dSigma = dSigma.sum(axis=-1)
     return dSigma / exp
 
 
@@ -93,6 +117,7 @@ class SO3Diffuser:
         self.max_sigma = so3_conf.max_sigma
 
         self.num_sigma = so3_conf.num_sigma
+        self.use_cached_score = so3_conf.use_cached_score
         self._log = logging.getLogger(__name__)
 
         # Discretize omegas for calculating CDFs. Skip omega=0.
@@ -243,7 +268,7 @@ class SO3Diffuser:
             self,
             vec: torch.tensor,
             t: torch.tensor,
-            eps: float=1e-6
+            eps: float=1e-6,
         ):
         """Computes the score of IGSO(3) density as a rotation vector.
 
@@ -257,14 +282,20 @@ class SO3Diffuser:
             [..., 3] score vector in the direction of the sampled vector with
             magnitude given by _score_norms.
         """
-        omega = torch.linalg.norm(vec, dim=-1)
-        score_norms_t = self._score_norms[self.t_to_idx(du.move_to_np(t))]
-        score_norms_t = torch.tensor(score_norms_t).to(vec.device)
-        omega_idx = torch.bucketize(
-            omega, torch.tensor(self.discrete_omega[:-1]).to(vec.device))
-        omega_score_t = torch.gather(
-            score_norms_t, 1, omega_idx)
-        return omega_score_t[..., None] * vec / (omega[..., None] + eps)
+        omega = torch.linalg.norm(vec, dim=-1) + eps
+        if self.use_cached_score:
+            score_norms_t = self._score_norms[self.t_to_idx(du.move_to_np(t))]
+            score_norms_t = torch.tensor(score_norms_t).to(vec.device)
+            omega_idx = torch.bucketize(
+                omega, torch.tensor(self.discrete_omega[:-1]).to(vec.device))
+            omega_scores_t = torch.gather(
+                score_norms_t, 1, omega_idx)
+        else:
+            sigma = self.discrete_sigma[self.t_to_idx(du.move_to_np(t))]
+            sigma = torch.tensor(sigma).to(vec.device)
+            omega_vals = igso3_expansion(omega, sigma[:, None], use_torch=True)
+            omega_scores_t = score(omega_vals, omega, sigma[:, None], use_torch=True)
+        return omega_scores_t[..., None] * vec / (omega[..., None] + eps)
 
     def score_scaling(self, t: np.ndarray):
         """Calculates scaling used for scores during trianing."""

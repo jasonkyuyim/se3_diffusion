@@ -6,6 +6,7 @@ defaults:
 data:
   # CSV for path and metadata to training examples.
   csv_path: ./data/processed_pdb/metadata.csv
+  cluster_path: ./data/processed_pdb/clusters-by-entity-30.txt
   filtering:
     max_len: 512
     min_len: 60
@@ -39,6 +40,7 @@ diffuser:
     max_sigma: 1.5
     schedule: logarithmic
     cache_dir: .cache/
+    use_cached_score: False
 
 model:
   node_embed_size: 256
@@ -74,15 +76,16 @@ experiment:
 
   # Training arguments
   log_freq: 1000
-  batch_size: 128
+  batch_size: 256
   eval_batch_size: ${data.samples_per_eval_length}
   num_loader_workers: 5
-  num_epoch: 95
+  num_epoch: 500_000
   learning_rate: 0.0001
-  max_squared_res: 300000
+  max_squared_res: 500000
   prefetch_factor: 100
   use_gpu: True
   num_gpus: 2
+  sample_mode: cluster_time_batch
 
   # Wandb logging
   wandb_dir: ./
@@ -100,8 +103,9 @@ experiment:
 
   # Loss weights.
   trans_loss_weight: 1.0
-  rot_loss_weight: 1.0
-  rot_loss_t_filter: 0.05
+  rot_loss_weight: 0.5
+  rot_loss_t_threshold: 0.2
+  separate_rot_loss: True
   trans_x0_threshold: 1.0
   coordinate_scaling: ${diffuser.r3.coordinate_scaling}
   bb_atom_loss_weight: 1.0
