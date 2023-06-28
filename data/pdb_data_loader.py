@@ -295,6 +295,7 @@ class TrainSampler(data.Sampler):
         self._batch_size = batch_size
         self.epoch = 0
         self._sample_mode = sample_mode
+        self.sampler_len = len(self._dataset_indices) * self._batch_size
 
         if self._sample_mode in ['cluster_length_batch', 'cluster_time_batch']:
             self._pdb_to_cluster = self._read_clusters()
@@ -310,6 +311,7 @@ class TrainSampler(data.Sampler):
                 return self._pdb_to_cluster[pdb]
             self._data_csv['cluster'] = self._data_csv['pdb_name'].map(cluster_lookup)
             num_clusters = len(set(self._data_csv['cluster']))
+            self.sampler_len = num_clusters * self._batch_size
             self._log.info(
                 f'Training on {num_clusters} clusters. PDBs without clusters: {self._missing_pdbs}'
             )
@@ -355,7 +357,7 @@ class TrainSampler(data.Sampler):
         self.epoch = epoch
 
     def __len__(self):
-        return len(self._dataset_indices) * self._batch_size
+        return self.sampler_len
 
 
 # modified from torch.utils.data.distributed.DistributedSampler
