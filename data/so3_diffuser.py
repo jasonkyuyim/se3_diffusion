@@ -31,10 +31,17 @@ def igso3_expansion(omega, eps, L=1000, use_torch=False):
     ls = lib.arange(L)
     if use_torch:
         ls = ls.to(omega.device)
-    if len(omega.shape) > 1:
-        ls = ls[None, None]
-        omega = omega[..., None]
+    if len(omega.shape) == 2:
+        # Used during predicted score calculation.
+        ls = ls[None, None]  # [1, 1, L]
+        omega = omega[..., None]  # [num_batch, num_res, 1]
         eps = eps[..., None]
+    elif len(omega.shape) == 1:
+        # Used during cache computation.
+        ls = ls[None]  # [1, L]
+        omega = omega[..., None]  # [num_batch, 1]
+    else:
+        raise ValueError("Omega must be 1D or 2D.")
     p = (2*ls + 1) * lib.exp(-ls*(ls+1)*eps**2/2) * lib.sin(omega*(ls+1/2)) / lib.sin(omega/2)
     if use_torch:
         return p.sum(dim=-1)
@@ -92,8 +99,10 @@ def score(exp, omega, eps, L=1000, use_torch=False):  # score of density over SO
     if use_torch:
         ls = ls.to(omega.device)
     ls = ls[None]
-    if len(omega.shape) > 1:
+    if len(omega.shape) == 2:
         ls = ls[None]
+    elif len(omega.shape) > 2:
+        raise ValueError("Omega must be 1D or 2D.")
     omega = omega[..., None]
     eps = eps[..., None]
     hi = lib.sin(omega * (ls + 1 / 2))
@@ -105,7 +114,7 @@ def score(exp, omega, eps, L=1000, use_torch=False):  # score of density over SO
         dSigma = dSigma.sum(dim=-1)
     else:
         dSigma = dSigma.sum(axis=-1)
-    return dSigma / exp
+    return dSigma / (exp + 1e-4)
 
 
 class SO3Diffuser:
@@ -259,10 +268,8 @@ class SO3Diffuser:
         """
         if not np.isscalar(t):
             raise ValueError(f'{t} must be a scalar.')
-        omega = np.linalg.norm(vec, axis=-1)
-        return np.interp(
-            omega, self.discrete_omega, self._score_norms[self.t_to_idx(t)]
-        )[:, None] * vec / (omega[:, None] + eps)
+        torch_score = self.torch_score(torch.tensor(vec), torch.tensor(t)[None])
+        return torch_score.numpy()
 
     def torch_score(
             self,
