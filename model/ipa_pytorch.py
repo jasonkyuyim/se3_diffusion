@@ -564,6 +564,7 @@ class IpaScore(nn.Module):
         ipa_conf = model_conf.ipa
         self._ipa_conf = ipa_conf
         self.diffuser = diffuser
+        self._flow_matching = getattr(ipa_conf, 'flow_matching', False)
 
         self.scale_pos = lambda x: x * ipa_conf.coordinate_scaling
         self.scale_rigids = lambda x: x.apply_trans_fn(self.scale_pos)
@@ -608,6 +609,13 @@ class IpaScore(nn.Module):
 
         self.torsion_pred = TorsionAngles(ipa_conf.c_s, 1)
 
+        # Flow matching velocity heads (predict velocity directly from node embeddings)
+        if self._flow_matching:
+            self.rot_velocity_head = ScoreLayer(
+                ipa_conf.c_s, ipa_conf.c_s, 3)
+            self.trans_velocity_head = ScoreLayer(
+                ipa_conf.c_s, ipa_conf.c_s, 3)
+
     def forward(self, init_node_embed, edge_embed, input_feats):
         node_mask = input_feats['res_mask'].type(torch.float32)
         diffuse_mask = (1 - input_feats['fixed_mask'].type(torch.float32)) * node_mask
@@ -616,9 +624,8 @@ class IpaScore(nn.Module):
 
         curr_rigids = Rigid.from_tensor_7(torch.clone(init_frames))
         init_rigids = Rigid.from_tensor_7(init_frames)
-        init_rots = init_rigids.get_rots()
 
-        # Main trunk
+        # Main trunk (identical for both score matching and flow matching)
         curr_rigids = self.scale_rigids(curr_rigids)
         init_node_embed = init_node_embed * node_mask[..., None]
         node_embed = init_node_embed * node_mask[..., None]
@@ -647,26 +654,42 @@ class IpaScore(nn.Module):
                 edge_embed = self.trunk[f'edge_transition_{b}'](
                     node_embed, edge_embed)
                 edge_embed *= edge_mask[..., None]
-        rot_score = self.diffuser.calc_rot_score(
-            init_rigids.get_rots(),
-            curr_rigids.get_rots(),
-            input_feats['t']
-        )
-        rot_score = rot_score * node_mask[..., None]
 
-        curr_rigids = self.unscale_rigids(curr_rigids)
-        trans_score = self.diffuser.calc_trans_score(
-            init_rigids.get_trans(),
-            curr_rigids.get_trans(),
-            input_feats['t'][:, None, None],
-            use_torch=True,
-        )
-        trans_score = trans_score * node_mask[..., None]
+        if self._flow_matching:
+            # Flow matching: predict velocity directly from node embeddings
+            rot_output = self.rot_velocity_head(
+                node_embed * diffuse_mask[..., None])
+            rot_output = rot_output * node_mask[..., None]
+
+            trans_output = self.trans_velocity_head(
+                node_embed * diffuse_mask[..., None])
+            trans_output = trans_output * node_mask[..., None]
+        else:
+            # Score matching: compute scores analytically from rigid deltas
+            rot_output = self.diffuser.calc_rot_score(
+                init_rigids.get_rots(),
+                curr_rigids.get_rots(),
+                input_feats['t']
+            )
+            rot_output = rot_output * node_mask[..., None]
+
+            curr_rigids = self.unscale_rigids(curr_rigids)
+            trans_output = self.diffuser.calc_trans_score(
+                init_rigids.get_trans(),
+                curr_rigids.get_trans(),
+                input_feats['t'][:, None, None],
+                use_torch=True,
+            )
+            trans_output = trans_output * node_mask[..., None]
+
+        if self._flow_matching:
+            curr_rigids = self.unscale_rigids(curr_rigids)
+
         _, psi_pred = self.torsion_pred(node_embed)
         model_out = {
             'psi': psi_pred,
-            'rot_score': rot_score,
-            'trans_score': trans_score,
+            'rot_score': rot_output,
+            'trans_score': trans_output,
             'final_rigids': curr_rigids,
         }
         return model_out

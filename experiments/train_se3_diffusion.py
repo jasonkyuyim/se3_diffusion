@@ -1,16 +1,13 @@
 """Pytorch script for training SE(3) protein diffusion.
 
-To run:
-
+To run (score matching, original):
 > python experiments/train_se3_diffusion.py
 
-Without Wandb,
+To run (rectified flow):
+> python experiments/train_se3_diffusion.py --config-name rectified_flow
 
+Without Wandb:
 > python experiments/train_se3_diffusion.py experiment.use_wandb=False
-
-To modify config options with the command line,
-
-> python experiments/train_se3_diffusion.py experiment.batch_size=32
 
 """
 import os
@@ -42,10 +39,55 @@ from analysis import utils as au
 from analysis import metrics
 from data import pdb_data_loader
 from data import se3_diffuser
+from data import se3_flow_matcher
 from data import utils as du
 from data import all_atom
 from model import score_network
 from experiments import utils as eu
+
+
+class EMA:
+    """Exponential Moving Average of model weights.
+
+    Use EMA weights for evaluation/inference; training weights for updates.
+    """
+
+    def __init__(self, model, decay: float = 0.999):
+        self.decay = decay
+        self.shadow = {}
+        self._backup = {}
+        for name, param in model.named_parameters():
+            if param.requires_grad:
+                self.shadow[name] = param.data.clone()
+
+    def update(self, model):
+        for name, param in model.named_parameters():
+            if param.requires_grad and name in self.shadow:
+                self.shadow[name] = (
+                    self.decay * self.shadow[name]
+                    + (1.0 - self.decay) * param.data
+                )
+
+    def apply(self, model):
+        """Swap model weights with EMA weights (for inference)."""
+        for name, param in model.named_parameters():
+            if param.requires_grad and name in self.shadow:
+                self._backup[name] = param.data.clone()
+                param.data.copy_(self.shadow[name])
+
+    def restore(self, model):
+        """Restore original training weights."""
+        for name, param in model.named_parameters():
+            if param.requires_grad and name in self._backup:
+                param.data.copy_(self._backup[name])
+        self._backup = {}
+
+    def state_dict(self):
+        return {'shadow': self.shadow, 'decay': self.decay}
+
+    def load_state_dict(self, state):
+        self.shadow = state['shadow']
+        self.decay = state['decay']
 
 
 class Experiment:
@@ -76,11 +118,16 @@ class Experiment:
         self._data_conf = conf.data
         self._use_wandb = self._exp_conf.use_wandb
         self._use_ddp = self._exp_conf.use_ddp
+
+        # Determine whether to use flow matching or score matching
+        diffuser_type = getattr(self._diff_conf, 'diffuser_type', 'score_matching')
+        self._flow_matching = (diffuser_type == 'flow_matching')
+
         # 1. initialize ddp info if in ddp mode
         # 2. silent rest of logger when use ddp mode
         # 3. silent wandb logger
         # 4. unset checkpoint path if rank is not 0 to avoid saving checkpoints and evaluation
-        if self._use_ddp :
+        if self._use_ddp:
             torch.cuda.set_device(int(os.environ["LOCAL_RANK"]))
             dist.init_process_group(backend='nccl')
             self.ddp_info = eu.get_ddp_info()
@@ -124,8 +171,14 @@ class Experiment:
                 self.trained_steps = ckpt_pkl['step']
 
 
-        # Initialize experiment objects
-        self._diffuser = se3_diffuser.SE3Diffuser(self._diff_conf)
+        # Initialize diffuser (flow matching or score matching)
+        if self._flow_matching:
+            self._diffuser = se3_flow_matcher.SE3FlowMatcher(self._diff_conf)
+            self._log.info('Using rectified flow matching.')
+        else:
+            self._diffuser = se3_diffuser.SE3Diffuser(self._diff_conf)
+            self._log.info('Using score matching (VP-SDE + IGSO3).')
+
         self._model = score_network.ScoreNetwork(
             self._model_conf, self.diffuser)
 
@@ -141,6 +194,34 @@ class Experiment:
         if ckpt_opt is not None:
             self._optimizer.load_state_dict(ckpt_opt)
 
+        # Gradient clipping
+        self._grad_clip_norm = getattr(self._exp_conf, 'gradient_clip_norm', None)
+
+        # EMA
+        use_ema = getattr(self._exp_conf, 'use_ema', False)
+        ema_decay = getattr(self._exp_conf, 'ema_decay', 0.999)
+        self._ema = EMA(self._model, decay=ema_decay) if use_ema else None
+
+        # LR scheduler (cosine with warmup)
+        use_cosine_lr = getattr(self._exp_conf, 'use_cosine_lr', False)
+        warmup_steps = getattr(self._exp_conf, 'warmup_steps', 1000)
+        if use_cosine_lr:
+            from torch.optim.lr_scheduler import CosineAnnealingLR, LinearLR, SequentialLR
+            total_steps = self._exp_conf.num_epoch * 1000  # rough estimate
+            warmup_sched = LinearLR(
+                self._optimizer, start_factor=0.01,
+                end_factor=1.0, total_iters=warmup_steps)
+            cosine_sched = CosineAnnealingLR(
+                self._optimizer, T_max=max(total_steps - warmup_steps, 1),
+                eta_min=1e-6)
+            self._lr_scheduler = SequentialLR(
+                self._optimizer, schedulers=[warmup_sched, cosine_sched],
+                milestones=[warmup_steps])
+            self._log.info(
+                f'Using cosine LR schedule with {warmup_steps} warmup steps.')
+        else:
+            self._lr_scheduler = None
+
         dt_string = datetime.now().strftime("%dD_%mM_%YY_%Hh_%Mm_%Ss")
         if self._exp_conf.ckpt_dir is not None:
             # Set-up checkpoint location
@@ -152,9 +233,9 @@ class Experiment:
                 os.makedirs(ckpt_dir, exist_ok=True)
             self._exp_conf.ckpt_dir = ckpt_dir
             self._log.info(f'Checkpoints saved to: {ckpt_dir}')
-        else:  
+        else:
             self._log.info('Checkpoint not being saved.')
-        if self._exp_conf.eval_dir is not None :
+        if self._exp_conf.eval_dir is not None:
             eval_dir = os.path.join(
                 self._exp_conf.eval_dir,
                 self._exp_conf.name,
@@ -322,7 +403,22 @@ class Experiment:
         self._optimizer.zero_grad()
         loss, aux_data = self.loss_fn(data)
         loss.backward()
+
+        # Gradient clipping
+        if self._grad_clip_norm is not None:
+            torch.nn.utils.clip_grad_norm_(
+                self._model.parameters(), self._grad_clip_norm)
+
         self._optimizer.step()
+
+        # Update EMA weights
+        if self._ema is not None:
+            self._ema.update(self._model)
+
+        # Step LR scheduler
+        if self._lr_scheduler is not None:
+            self._lr_scheduler.step()
+
         return loss, aux_data
 
     def train_epoch(
@@ -362,6 +458,11 @@ class Experiment:
                 ):
                 ckpt_path = os.path.join(
                     self._exp_conf.ckpt_dir, f'step_{self.trained_steps}.pth')
+
+                # Apply EMA for checkpoint / evaluation if available
+                if self._ema is not None:
+                    self._ema.apply(self._model)
+
                 du.write_checkpoint(
                     ckpt_path,
                     copy.deepcopy(self.model.state_dict()),
@@ -385,6 +486,10 @@ class Experiment:
                 )
                 eval_time = time.time() - start_time
                 self._log.info(f'Finished evaluation in {eval_time:.2f}s')
+
+                # Restore training weights after eval
+                if self._ema is not None:
+                    self._ema.restore(self._model)
             else:
                 ckpt_metrics = None
                 eval_time = None
@@ -405,6 +510,8 @@ class Experiment:
                     'examples_per_sec': example_per_sec,
                     'num_epochs': self.trained_epochs,
                 }
+                if self._lr_scheduler is not None:
+                    wandb_logs['lr'] = self._optimizer.param_groups[0]['lr']
 
                 # Stratified losses
                 wandb_logs.update(eu.t_stratified_loss(
@@ -526,7 +633,6 @@ class Experiment:
 
         Args:
             batch: Batched data.
-            model_out: Output of model ran on batch.
 
         Returns:
             loss: Final training loss scalar.
@@ -550,63 +656,79 @@ class Experiment:
         pred_rot_score = model_out['rot_score'] * diffuse_mask[..., None]
         pred_trans_score = model_out['trans_score'] * diffuse_mask[..., None]
 
-        # Translation score loss
-        trans_score_mse = (gt_trans_score - pred_trans_score)**2 * loss_mask[..., None]
-        trans_score_loss = torch.sum(
-            trans_score_mse / trans_score_scaling[:, None, None]**2,
-            dim=(-1, -2)
-        ) / (loss_mask.sum(dim=-1) + 1e-10)
-
-        # Translation x0 loss
-        gt_trans_x0 = batch['rigids_0'][..., 4:] * self._exp_conf.coordinate_scaling
-        pred_trans_x0 = model_out['rigids'][..., 4:] * self._exp_conf.coordinate_scaling
-        trans_x0_loss = torch.sum(
-            (gt_trans_x0 - pred_trans_x0)**2 * loss_mask[..., None],
-            dim=(-1, -2)
-        ) / (loss_mask.sum(dim=-1) + 1e-10)
-
-        trans_loss = (
-            trans_score_loss * (batch['t'] > self._exp_conf.trans_x0_threshold)
-            + trans_x0_loss * (batch['t'] <= self._exp_conf.trans_x0_threshold)
-        )
-        trans_loss *= self._exp_conf.trans_loss_weight
-        trans_loss *= int(self._diff_conf.diffuse_trans)
-
-        # Rotation loss
-        if self._exp_conf.separate_rot_loss:
-            gt_rot_angle = torch.norm(gt_rot_score, dim=-1, keepdim=True)
-            gt_rot_axis = gt_rot_score / (gt_rot_angle + 1e-6)
-
-            pred_rot_angle = torch.norm(pred_rot_score, dim=-1, keepdim=True)
-            pred_rot_axis = pred_rot_score / (pred_rot_angle + 1e-6)
-
-            # Separate loss on the axis
-            axis_loss = (gt_rot_axis - pred_rot_axis)**2 * loss_mask[..., None]
-            axis_loss = torch.sum(
-                axis_loss, dim=(-1, -2)
-            ) / (loss_mask.sum(dim=-1) + 1e-10)
-
-            # Separate loss on the angle
-            angle_loss = (gt_rot_angle - pred_rot_angle)**2 * loss_mask[..., None]
-            angle_loss = torch.sum(
-                angle_loss / rot_score_scaling[:, None, None]**2,
+        if self._flow_matching:
+            # Flow matching: simple velocity MSE, no scaling or t-thresholds
+            trans_score_mse = (gt_trans_score - pred_trans_score)**2 * loss_mask[..., None]
+            trans_score_loss = torch.sum(
+                trans_score_mse,
                 dim=(-1, -2)
             ) / (loss_mask.sum(dim=-1) + 1e-10)
-            angle_loss *= self._exp_conf.rot_loss_weight
-            angle_loss *= batch['t'] > self._exp_conf.rot_loss_t_threshold
-            rot_loss = angle_loss + axis_loss
-        else:
+            trans_loss = trans_score_loss * self._exp_conf.trans_loss_weight
+            trans_loss *= int(self._diff_conf.diffuse_trans)
+
             rot_mse = (gt_rot_score - pred_rot_score)**2 * loss_mask[..., None]
             rot_loss = torch.sum(
-                rot_mse / rot_score_scaling[:, None, None]**2,
+                rot_mse,
                 dim=(-1, -2)
             ) / (loss_mask.sum(dim=-1) + 1e-10)
             rot_loss *= self._exp_conf.rot_loss_weight
-            rot_loss *= batch['t'] > self._exp_conf.rot_loss_t_threshold
-        rot_loss *= int(self._diff_conf.diffuse_rot)
+            rot_loss *= int(self._diff_conf.diffuse_rot)
+        else:
+            # Score matching: weighted MSE with score scaling and t-thresholds
+            # Translation score loss
+            trans_score_mse = (gt_trans_score - pred_trans_score)**2 * loss_mask[..., None]
+            trans_score_loss = torch.sum(
+                trans_score_mse / trans_score_scaling[:, None, None]**2,
+                dim=(-1, -2)
+            ) / (loss_mask.sum(dim=-1) + 1e-10)
 
+            # Translation x0 loss
+            gt_trans_x0 = batch['rigids_0'][..., 4:] * self._exp_conf.coordinate_scaling
+            pred_trans_x0 = model_out['rigids'][..., 4:] * self._exp_conf.coordinate_scaling
+            trans_x0_loss = torch.sum(
+                (gt_trans_x0 - pred_trans_x0)**2 * loss_mask[..., None],
+                dim=(-1, -2)
+            ) / (loss_mask.sum(dim=-1) + 1e-10)
 
-        # Backbone atom loss
+            trans_loss = (
+                trans_score_loss * (batch['t'] > self._exp_conf.trans_x0_threshold)
+                + trans_x0_loss * (batch['t'] <= self._exp_conf.trans_x0_threshold)
+            )
+            trans_loss *= self._exp_conf.trans_loss_weight
+            trans_loss *= int(self._diff_conf.diffuse_trans)
+
+            # Rotation loss
+            if self._exp_conf.separate_rot_loss:
+                gt_rot_angle = torch.norm(gt_rot_score, dim=-1, keepdim=True)
+                gt_rot_axis = gt_rot_score / (gt_rot_angle + 1e-6)
+
+                pred_rot_angle = torch.norm(pred_rot_score, dim=-1, keepdim=True)
+                pred_rot_axis = pred_rot_score / (pred_rot_angle + 1e-6)
+
+                axis_loss = (gt_rot_axis - pred_rot_axis)**2 * loss_mask[..., None]
+                axis_loss = torch.sum(
+                    axis_loss, dim=(-1, -2)
+                ) / (loss_mask.sum(dim=-1) + 1e-10)
+
+                angle_loss = (gt_rot_angle - pred_rot_angle)**2 * loss_mask[..., None]
+                angle_loss = torch.sum(
+                    angle_loss / rot_score_scaling[:, None, None]**2,
+                    dim=(-1, -2)
+                ) / (loss_mask.sum(dim=-1) + 1e-10)
+                angle_loss *= self._exp_conf.rot_loss_weight
+                angle_loss *= batch['t'] > self._exp_conf.rot_loss_t_threshold
+                rot_loss = angle_loss + axis_loss
+            else:
+                rot_mse = (gt_rot_score - pred_rot_score)**2 * loss_mask[..., None]
+                rot_loss = torch.sum(
+                    rot_mse / rot_score_scaling[:, None, None]**2,
+                    dim=(-1, -2)
+                ) / (loss_mask.sum(dim=-1) + 1e-10)
+                rot_loss *= self._exp_conf.rot_loss_weight
+                rot_loss *= batch['t'] > self._exp_conf.rot_loss_t_threshold
+            rot_loss *= int(self._diff_conf.diffuse_rot)
+
+        # Backbone atom loss (same for both modes)
         pred_atom37 = model_out['atom37'][:, :, :5]
         gt_rigids = ru.Rigid.from_tensor_7(batch['rigids_0'].type(torch.float32))
         gt_psi = batch['torsion_angles_sin_cos'][..., 2, :]
@@ -626,7 +748,7 @@ class Experiment:
         bb_atom_loss *= batch['t'] < self._exp_conf.bb_atom_loss_t_filter
         bb_atom_loss *= self._exp_conf.aux_loss_weight
 
-        # Pairwise distance loss
+        # Pairwise distance loss (same for both modes)
         gt_flat_atoms = gt_atom37.reshape([batch_size, num_res*5, 3])
         gt_pair_dists = torch.linalg.norm(
             gt_flat_atoms[:, :, None, :] - gt_flat_atoms[:, None, :, :], dim=-1)
@@ -692,12 +814,6 @@ class Experiment:
         assert batch_loss_mask.shape == (batch_size,)
         return normalize_loss(final_loss), aux_data
 
-    def _calc_trans_0(self, trans_score, trans_t, t):
-        beta_t = self._diffuser._se3_diffuser._r3_diffuser.marginal_b_t(t)
-        beta_t = beta_t[..., None, None]
-        cond_var = 1 - torch.exp(-beta_t)
-        return (trans_score * cond_var + trans_t) / torch.exp(-1/2*beta_t)
-
     def _set_t_feats(self, feats, t, t_placeholder):
         feats['t'] = t * t_placeholder
         rot_score_scaling, trans_score_scaling = self.diffuser.score_scaling(t)
@@ -709,8 +825,13 @@ class Experiment:
         forward_steps = np.linspace(min_t, 1.0, num_t)[:-1]
         x_traj = [x_0]
         for t in forward_steps:
-            x_t = self.diffuser.se3_diffuser._r3_diffuser.forward(
-                x_traj[-1], t, num_t)
+            if self._flow_matching:
+                dt = 1.0 / num_t
+                z = torch.randn_like(x_traj[-1])
+                x_t = x_traj[-1] + dt * z
+            else:
+                x_t = self.diffuser._r3_diffuser.forward(
+                    x_traj[-1], t, num_t)
             x_traj.append(x_t)
         x_traj = torch.stack(x_traj, axis=0)
         return x_traj
@@ -727,8 +848,12 @@ class Experiment:
         ):
         """Inference function.
 
+        For score matching: reverse SDE with noise injection.
+        For flow matching: deterministic ODE integration (no noise needed).
+
         Args:
             data_init: Initial data values for sampling.
+            noise_scale: Only used for score matching reverse SDE.
         """
 
         # Run reverse process.
@@ -782,7 +907,7 @@ class Experiment:
                 if aux_traj:
                     all_rigids.append(du.move_to_np(rigids_t.to_tensor_7()))
 
-                # Calculate x0 prediction derived from score predictions.
+                # Calculate x0 prediction derived from score/velocity predictions.
                 gt_trans_0 = sample_feats['rigids_t'][..., 4:]
                 pred_trans_0 = rigid_pred[..., 4:]
                 trans_pred_0 = diffuse_mask[..., None] * pred_trans_0 + fixed_mask[..., None] * gt_trans_0

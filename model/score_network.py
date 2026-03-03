@@ -94,6 +94,18 @@ class Embedder(nn.Module):
             embed_size=self._embed_conf.index_embed_size
         )
 
+        # Pairwise conditioning from protein language model embeddings
+        pair_cond_dim = getattr(self._embed_conf, 'pair_conditioning_dim', 0)
+        if pair_cond_dim > 0:
+            self.pair_cond_proj = nn.Sequential(
+                nn.Linear(pair_cond_dim, edge_embed_size),
+                nn.ReLU(),
+                nn.Linear(edge_embed_size, edge_embed_size),
+                nn.LayerNorm(edge_embed_size),
+            )
+        else:
+            self.pair_cond_proj = None
+
     def _cross_concat(self, feats_1d, num_batch, num_res):
         return torch.cat([
             torch.tile(feats_1d[:, :, None, :], (1, 1, num_res, 1)),
@@ -107,6 +119,7 @@ class Embedder(nn.Module):
             t,
             fixed_mask,
             self_conditioning_ca,
+            pair_conditioning=None,
         ):
         """Embeds a set of inputs
 
@@ -116,6 +129,8 @@ class Embedder(nn.Module):
             fixed_mask: mask of fixed (motif) residues.
             self_conditioning_ca: [..., N, 3] Ca positions of self-conditioning
                 input.
+            pair_conditioning: [..., N, N, D_cond] optional pairwise features
+                from a protein language model.
 
         Returns:
             node_embed: [B, N, D_node]
@@ -151,6 +166,12 @@ class Embedder(nn.Module):
         node_embed = self.node_embedder(torch.cat(node_feats, dim=-1).float())
         edge_embed = self.edge_embedder(torch.cat(pair_feats, dim=-1).float())
         edge_embed = edge_embed.reshape([num_batch, num_res, num_res, -1])
+
+        # Add pairwise conditioning from PLM if provided
+        if pair_conditioning is not None and self.pair_cond_proj is not None:
+            pair_cond_embed = self.pair_cond_proj(pair_conditioning.float())
+            edge_embed = edge_embed + pair_cond_embed
+
         return node_embed, edge_embed
 
 
@@ -190,6 +211,7 @@ class ScoreNetwork(nn.Module):
             t=input_feats['t'],
             fixed_mask=fixed_mask,
             self_conditioning_ca=input_feats['sc_ca_t'],
+            pair_conditioning=input_feats.get('pair_conditioning', None),
         )
         edge_embed = init_edge_embed * edge_mask[..., None]
         node_embed = init_node_embed * bb_mask[..., None]

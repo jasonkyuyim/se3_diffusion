@@ -1,0 +1,83 @@
+# Rectified flow configuration for SE(3) protein backbone generation.
+#
+# Replaces VP-SDE score matching with:
+#   - Linear interpolation in R^3 (translations)
+#   - Geodesic SLERP on SO(3) (rotations)
+#   - Direct velocity prediction instead of score prediction
+#   - Deterministic ODE sampling (no noise needed at inference)
+#
+# Also enables training improvements:
+#   - EMA weight averaging
+#   - Gradient clipping
+#   - Cosine LR schedule with warmup
+#   - Logit-normal timestep sampling
+#
+# To train:
+#   python experiments/train_se3_diffusion.py --config-name rectified_flow
+#
+# To add pairwise PLM conditioning, set:
+#   model.embed.pair_conditioning_dim=128
+
+defaults:
+  - base
+  - _self_
+
+diffuser:
+  diffuser_type: flow_matching
+  diffuse_trans: True
+  diffuse_rot: True
+  r3:
+    coordinate_scaling: 0.1
+    # min_b/max_b not used for flow matching but kept for config compatibility
+    min_b: 0.1
+    max_b: 20.0
+  so3:
+    # SO3 flow matcher uses these fields only for SO3FlowMatcher init;
+    # IGSO3 tables are not computed in flow matching mode.
+    num_omega: 1000
+    num_sigma: 1000
+    min_sigma: 0.1
+    max_sigma: 1.5
+    schedule: logarithmic
+    cache_dir: .cache/
+    use_cached_score: False
+
+model:
+  embed:
+    embed_self_conditioning: True
+    # Set pair_conditioning_dim > 0 to enable PLM pairwise conditioning
+    pair_conditioning_dim: 0
+  ipa:
+    flow_matching: True  # Enable explicit velocity prediction heads
+
+experiment:
+  name: rectified_flow
+
+  # Loss: simple velocity MSE (no score scaling or t-regime thresholds)
+  trans_loss_weight: 1.0
+  rot_loss_weight: 1.0
+  # Thresholds are ignored in flow matching mode but kept for config completeness
+  rot_loss_t_threshold: 0.0
+  trans_x0_threshold: 0.0
+  separate_rot_loss: False
+
+  # Auxiliary losses (applied at low t, same as score matching)
+  bb_atom_loss_weight: 1.0
+  bb_atom_loss_t_filter: 0.25
+  dist_mat_loss_weight: 1.0
+  dist_mat_loss_t_filter: 0.25
+  aux_loss_weight: 0.25
+
+  # Training improvements
+  gradient_clip_norm: 1.0
+  use_ema: True
+  ema_decay: 0.999
+  use_cosine_lr: True
+  warmup_steps: 1000
+  learning_rate: 0.0001
+
+data:
+  # Fewer steps needed for deterministic ODE vs stochastic SDE
+  num_t: 50
+  # Logit-normal t sampling: concentrates signal around t=0.5
+  logit_normal_t: True

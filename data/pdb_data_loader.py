@@ -249,7 +249,14 @@ class PdbDataset(data.Dataset):
 
         # Sample t and diffuse.
         if self.is_training:
-            t = rng.uniform(self._data_conf.min_t, 1.0)
+            # Logit-normal sampling focuses signal on mid-range t values.
+            # Falls back to uniform sampling when logit_normal_t is not set.
+            if getattr(self._data_conf, 'logit_normal_t', False):
+                u = rng.standard_normal()
+                t = float(1.0 / (1.0 + np.exp(-u)))
+                t = float(np.clip(t, self._data_conf.min_t, 1.0))
+            else:
+                t = rng.uniform(self._data_conf.min_t, 1.0)
             diff_feats_t = self._diffuser.forward_marginal(
                 rigids_0=gt_bb_rigid,
                 t=t,
